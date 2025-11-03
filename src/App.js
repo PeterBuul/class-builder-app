@@ -166,10 +166,9 @@ function App() {
     const subHeaderRow = [];
     const colWidths = [];
 
-    // FIX: Flatten all generated classes from all groups into one list
+    // Flatten all generated classes from all groups into one list
     const allclasses = [];
     const groupNames = Object.keys(generatedClasses);
-    
     let maxLen = 0; // Find max class length across all classes
     
     groupNames.forEach(groupName => {
@@ -201,7 +200,7 @@ function App() {
       // Set col widths
       colWidths.push({wch: 30}, {wch: 10}, {wch: 10}, {wch: 10});
 
-      // FIX: Add spacer column
+      // Add spacer column
       if (index < allclasses.length - 1) {
         headerRow.push(null);
         subHeaderRow.push(null);
@@ -223,7 +222,7 @@ function App() {
         } else {
           row.push(null, null, null, null); // Empty cells
         }
-        // FIX: Add spacer
+        // Add spacer
         if (index < allclasses.length - 1) {
           row.push(null);
         }
@@ -231,12 +230,38 @@ function App() {
       wsData.push(row);
     }
     
-    // 3. Create worksheet
+    // 3. Add Stats Rows
+    wsData.push([]); // Spacer row
+    const balanceTitleRow = [];
+    const genderData = ["Gender:"];
+    const academicData = ["Academic:"];
+    const behaviourData = ["Behaviour:"];
+    const existingData = ["Previous Class:"];
+
+    let colIndex = 0;
+    const statsStartRow = wsData.length; // This is the row index where stats titles will start
+
+    allclasses.forEach((cls, i) => {
+      // Add title for this class
+      balanceTitleRow[colIndex] = "--- Class Balance ---";
+      
+      // Get stats as strings
+      genderData[colIndex] = Object.entries(cls.stats.gender).map(([k, v]) => `${k}: ${v}`).join(', ');
+      academicData[colIndex] = Object.entries(cls.stats.academic).map(([k, v]) => `${k}: ${v}`).join(', ');
+      behaviourData[colIndex] = Object.entries(cls.stats.behaviour).map(([k, v]) => `${k}: ${v}`).join(', ');
+      existingData[colIndex] = Object.entries(cls.stats.existingClass).map(([k, v]) => `${k}: ${v}`).join(', ');
+      
+      colIndex += 5; // Move to the start of the next class block (4 cols + 1 spacer)
+    });
+    
+    wsData.push(balanceTitleRow, genderData, academicData, behaviourData, existingData);
+
+    // 4. Create worksheet
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     
-    // 4. Add Merges
+    // 5. Add Merges (Headers)
     ws['!merges'] = [];
-    let colIndex = 0;
+    colIndex = 0;
     for (let i = 0; i < allclasses.length; i++) {
       ws['!merges'].push({
         s: { c: colIndex, r: 0 }, // Start cell (col, row)
@@ -245,40 +270,74 @@ function App() {
       colIndex += 5; // 4 for class, 1 for spacer
     }
     
-    // 5. Add Styling (Highlights)
+    // 6. Add Merges (Stats Title)
+    colIndex = 0;
+    for (let i = 0; i < allclasses.length; i++) {
+      ws['!merges'].push({
+        s: { c: colIndex, r: statsStartRow }, 
+        e: { c: colIndex + 3, r: statsStartRow }
+      });
+      colIndex += 5;
+    }
+    
+    // 7. Add Styling (Highlights)
     const greenFill = { fill: { fgColor: { rgb: "FFC7EFCF" } } };
     const redFill = { fill: { fgColor: { rgb: "FFFFC7CE" } } };
 
-    for (let r = 2; r < wsData.length; r++) { // Start from data row (index 2)
+    // Loop from r=2 (first data row) up to maxLen+1
+    for (let r = 2; r < maxLen + 2; r++) { 
       colIndex = 0;
       for (let c = 0; c < allclasses.length; c++) {
-        const studentCellRef = XLSX.utils.encode_cell({ r: r, c: colIndex });
-        const studentCell = ws[studentCellRef];
+        // Get the student for this row (r-2)
+        const student = allclasses[c].students.sort((a,b) => a.surname.localeCompare(b.surname))[r-2];
         
-        if (studentCell && studentCell.v) {
-          const studentName = studentCell.v;
+        if (student) {
+          const studentName = student.fullName;
           const classStudents = allclasses[c].students;
           
-          // FIX: Call existing highlight function
-          const highlight = getFriendSeparationHighlight(studentName, classStudents);
+          // --- NEW HIGHLIGHT LOGIC ---
+          let highlight = ''; // 'green', 'red'
           
-          if (highlight === 'bg-green-200') {
-            studentCell.s = greenFill;
-          } else if (highlight === 'bg-red-200') {
-            studentCell.s = redFill;
+          // Friend pairings first
+          friendRequests.forEach(req => {
+            if (req.students.includes(studentName) && classStudents.some(s => req.students.includes(s.fullName) && s.fullName !== studentName)) {
+              highlight = 'green'; // Friend pair
+            }
+          });
+
+          // Separation requests override
+          separationRequests.forEach(req => {
+            if (req.students.includes(studentName)) {
+              highlight = 'red'; // SEPARATION REQUESTED
+            }
+          });
+          
+          // Apply style to cell
+          if (highlight === 'green') {
+            const studentCellRef = XLSX.utils.encode_cell({ r: r, c: colIndex });
+            const studentCell = ws[studentCellRef];
+            if (studentCell) {
+              studentCell.s = greenFill;
+            }
+          } else if (highlight === 'red') {
+            const studentCellRef = XLSX.utils.encode_cell({ r: r, c: colIndex });
+            const studentCell = ws[studentCellRef];
+            if (studentCell) {
+              studentCell.s = redFill;
+            }
           }
         }
         colIndex += 5; // 4 for class, 1 for spacer
       }
     }
 
-    // 6. Set Column Widths
+    // 8. Set Column Widths
     ws['!cols'] = colWidths;
     
-    // 7. Add worksheet to workbook (only one sheet)
+    // 9. Add worksheet to workbook (only one sheet)
     XLSX.utils.book_append_sheet(wb, ws, "Generated Classes");
     
-    // 8. Write and download
+    // 10. Write and download
     XLSX.writeFile(wb, "generated_classes.xlsx");
   };
 
@@ -401,7 +460,6 @@ function App() {
   // Main logic to generate classes
   const generateClasses = () => {
     // 1. Get user inputs
-    // *** THIS IS THE CRITICAL FIX ***
     const yearLevels = yearLevelsInput.split(',').map(s => s.trim()).filter(Boolean);
     const numTotalClasses = totalClassesInput;
     const numCompositeClasses = compositeClassesInput;
@@ -463,7 +521,7 @@ function App() {
       );
 
       if (newClasses.length > 0) {
-        // FIX: Name class with *next* year's level
+        // Name class with *next* year's level
         finalClasses[`Straight Year ${parseInt(year, 10) + 1}`] = newClasses;
       }
       placedIds.forEach(id => allPlacedStudentIds.add(id));
@@ -478,7 +536,7 @@ function App() {
     );
 
     if (compositeClasses.length > 0) {
-      // FIX: Name composite with *next* year's levels
+      // Name composite with *next* year's levels
       const nextYears = yearLevels.map(y => parseInt(y, 10) + 1).join('/');
       const groupName = `Composite ${nextYears}`;
       finalClasses[groupName] = compositeClasses;
@@ -511,10 +569,18 @@ function App() {
         highlight = 'bg-green-200'; // Friend pair
       }
     });
-    // Check for separation violations (Red)
+    
+    // --- NEW HIGHLIGHT LOGIC ---
+    // Separation requests override green
     separationRequests.forEach(req => {
-      if (req.students.includes(studentName) && classStudents.some(s => req.students.includes(s.fullName) && s.fullName !== studentName)) {
-        highlight = 'bg-red-200'; // Separation violation
+      if (req.students.includes(studentName)) {
+        // Check for a VIOLATION (darker red)
+        if (classStudents.some(s => req.students.includes(s.fullName) && s.fullName !== studentName)) {
+          highlight = 'bg-red-500'; // VIOLATION - dark red
+        } else {
+          // SUCCESSFUL separation, but highlight them anyway
+          highlight = 'bg-red-200'; // SEPARATION REQUESTED - light red
+        }
       }
     });
     return highlight;
