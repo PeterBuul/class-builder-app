@@ -262,7 +262,7 @@ function App() {
     if (wb.SheetNames.length > 0) {
       XLSX.writeFile(wb, "generated_classes.xlsx");
     } else {
-      console.error("No data to export");
+      console.error("No data to export because no classes were generated.");
     }
   };
 
@@ -277,7 +277,7 @@ function App() {
   };
 
   /**
-   * NEW: This is the core balancing logic, extracted into a reusable function.
+   * This is the core balancing logic, extracted into a reusable function.
    */
   const runBalancing = (studentPool, numClassesToMake) => {
     if (numClassesToMake <= 0 || !studentPool || studentPool.length === 0) {
@@ -304,8 +304,9 @@ function App() {
     // 2. Handle Friend Requests (pre-seeding)
     friendRequests.forEach(req => {
       const [name1, name2] = req.students;
-      const s1Index = availableStudents.findIndex(s => s.fullName === name1);
-      const s2Index = availableStudents.findIndex(s => s.fullName === name2);
+      // Find students *in this pool*
+      const s1Index = availableStudents.findIndex(s => s.fullName === name1 && !placedStudentIds.includes(s.id));
+      const s2Index = availableStudents.findIndex(s => s.fullName === name2 && !placedStudentIds.includes(s.id));
       
       if (s1Index > -1 && s2Index > -1) {
         const s1 = availableStudents[s1Index];
@@ -383,7 +384,8 @@ function App() {
 
   // Main logic to generate classes
   const generateClasses = () => {
-    const yearLevels = yearLevelsInput.split(',').map(s => s.trim()).filter(Boolean);
+    // 1. Get user inputs
+    const yearLevels = yearLevelsInput.split(',').map(s => s.trim().filter(Boolean));
     const numTotalClasses = totalClassesInput;
     const numCompositeClasses = compositeClassesInput;
     const numStraightClasses = numTotalClasses - numCompositeClasses;
@@ -396,39 +398,48 @@ function App() {
     const finalClasses = {};
     const allPlacedStudentIds = new Set();
 
-    // 1. Get all students for this entire group
+    // 2. Get all students for this entire group
+    // *** THIS IS THE CRITICAL FIX ***
+    // Filter students whose class *starts with* any of the input years.
     const allGroupStudents = students.filter(s => {
-      const studentYear = s.existingClass.match(/\d+/); // Get "7" from "7A"
-      if (!studentYear) return false;
-      return yearLevels.includes(studentYear[0]);
+      const studentClass = s.existingClass; // e.g., "4A" or "5/6A"
+      // Check if studentClass starts with any of the user-inputted year levels
+      return yearLevels.some(year => studentClass.startsWith(year));
     });
 
-    // 2. Create and count separate pools for each straight year level
+    // 3. Create and count separate pools for each straight year level
     const straightYearPools = {};
     const straightYearCounts = {};
     let totalStraightStudents = 0;
 
     yearLevels.forEach(year => {
+      // Get students *just* for this year
       const yearPool = allGroupStudents.filter(s => s.existingClass.startsWith(year));
       straightYearPools[year] = yearPool;
       straightYearCounts[year] = yearPool.length;
       totalStraightStudents += yearPool.length;
     });
 
-    // 3. Generate STRAIGHT classes proportionally
+    // 4. Generate STRAIGHT classes proportionally
     let straightClassesCreated = 0;
     yearLevels.forEach((year, index) => {
       const studentCount = straightYearCounts[year];
+      if (studentCount === 0) return; // No students for this year
       
       // Pro-rata calculation
       let numClassesForThisYear;
-      if (index === yearLevels.length - 1) {
+      if (numStraightClasses === 0) {
+         numClassesForThisYear = 0;
+      } else if (index === yearLevels.length - 1) {
         // Last year level gets the remaining classes
         numClassesForThisYear = numStraightClasses - straightClassesCreated;
       } else {
+        // Pro-rata based on number of students
         numClassesForThisYear = Math.round((studentCount / totalStraightStudents) * numStraightClasses);
         straightClassesCreated += numClassesForThisYear;
       }
+
+      if(numClassesForThisYear < 0) numClassesForThisYear = 0;
 
       const [newClasses, placedIds] = runBalancing(
         straightYearPools[year], 
@@ -441,7 +452,7 @@ function App() {
       placedIds.forEach(id => allPlacedStudentIds.add(id));
     });
 
-    // 4. Generate COMPOSITE classes from the leftovers
+    // 5. Generate COMPOSITE classes from the leftovers
     const compositePool = allGroupStudents.filter(s => !allPlacedStudentIds.has(s.id));
     
     const [compositeClasses, placedIds] = runBalancing(
@@ -453,11 +464,10 @@ function App() {
       const groupName = `Composite ${yearLevels.join('/')}`;
       finalClasses[groupName] = compositeClasses;
     }
-
-    // *** THIS IS THE FIX: ***
-    // Use the placedIds from the composite run
-    placedIds.forEach(id => allPlacedStudentIds.add(id));
     
+    // Add these IDs to the set (even though it's the last step, it's good practice)
+    placedIds.forEach(id => allPlacedStudentIds.add(id));
+
     setGeneratedClasses(finalClasses); // Set the final object
   };
 
@@ -540,15 +550,18 @@ function App() {
           {/* NEW Simplified Class Group Inputs */}
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2">
-              Year Levels (e.g., 7 or 5, 6)
+              Year Levels (e.g., 7 or 4, 5)
             </label>
             <input
               type="text"
               value={yearLevelsInput}
               onChange={(e) => setYearLevelsInput(e.target.value)}
               className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              placeholder="e.g., 7 or 5, 6"
+              placeholder="e.g., 7 or 4, 5"
             />
+             <p className="text-gray-600 text-xs mt-2">
+              List the **current** year levels to pull students from (e.g., "4, 5" to make a 5/6 group).
+            </p>
           </div>
 
           <div className="mb-4">
@@ -576,7 +589,7 @@ function App() {
               min="0"
             />
              <p className="text-gray-600 text-xs mt-2">
-              Example: 6 Total Classes, 1 Composite = 5 Straight Classes (split proportionally) + 1 Composite Class (from leftovers).
+              Example: 6 Total, 1 Composite = 5 Straight Classes + 1 Composite Class.
             </p>
           </div>
           
