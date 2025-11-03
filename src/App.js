@@ -245,7 +245,8 @@ function App() {
       balanceTitleRow[colIndex] = "--- Class Balance ---";
       
       genderRow[colIndex] = "Gender:";
-      genderRow[colIndex+1] = Object.entries(cls.stats.gender).map(([k, v])_ => `${k}: ${v}`).join(', ');
+      // *** THIS IS THE FIX *** (Removed the stray '_')
+      genderRow[colIndex+1] = Object.entries(cls.stats.gender).map(([k, v]) => `${k}: ${v}`).join(', ');
       
       academicRow[colIndex] = "Academic:";
       academicRow[colIndex+1] = Object.entries(cls.stats.academic).map(([k, v]) => `${k}: ${v}`).join(', ');
@@ -667,7 +668,7 @@ function App() {
             <input
               type="number"
               value={compositeClassesInput}
-              onChange={(e) => setCompositeClassesInput(parseInt(e.gtarget.value, 10) || 0)}
+              onChange={(e) => setCompositeClassesInput(parseInt(e.target.value, 10) || 0)}
               className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
               min="0"
             />
