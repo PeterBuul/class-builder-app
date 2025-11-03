@@ -16,22 +16,42 @@ function App() {
     const newFriendRequests = [];
     const newSeparationRequests = [];
 
+    // "Smart" name finder. Finds "John D" or "John" from the list.
+    const findStudentFullName = (partialName, allStudents) => {
+      if (!partialName) return null;
+      const pName = partialName.toLowerCase().trim();
+      
+      // 1. Try exact full name match (case-insensitive)
+      let match = allStudents.find(s => s.fullName.toLowerCase() === pName);
+      if (match) return match.fullName;
+
+      // 2. Try "starts with" match (e.g., "John D" matches "John Doe")
+      match = allStudents.find(s => s.fullName.toLowerCase().startsWith(pName));
+      if (match) return match.fullName;
+      
+      return null; // No match found
+    };
+
     students.forEach(student => {
       // Logic for "Request: Pair"
       if (student.requestPair) {
-        const friendName = student.requestPair.trim();
-        // Add request, avoiding duplicates
-        if (friendName && !newFriendRequests.some(r => r.students.includes(student.fullName) && r.students.includes(friendName))) {
-          newFriendRequests.push({ students: [student.fullName, friendName], requestedBy: 'Import' });
+        const friendFullName = findStudentFullName(student.requestPair, students);
+        // Add request if found, not a self-pair, and not a duplicate
+        if (friendFullName && student.fullName !== friendFullName) {
+          if (!newFriendRequests.some(r => r.students.includes(student.fullName) && r.students.includes(friendFullName))) {
+            newFriendRequests.push({ students: [student.fullName, friendFullName], requestedBy: 'Import' });
+          }
         }
       }
       
       // Logic for "Request: Separate"
       if (student.requestSeparate) {
-        const separateName = student.requestSeparate.trim();
-        // Add request, avoiding duplicates
-        if (separateName && !newSeparationRequests.some(r => r.students.includes(student.fullName) && r.students.includes(separateName))) {
-          newSeparationRequests.push({ students: [student.fullName, separateName], requestedBy: 'Import' });
+        const separateFullName = findStudentFullName(student.requestSeparate, students);
+        // Add request if found, not a self-pair, and not a duplicate
+        if (separateFullName && student.fullName !== separateFullName) {
+          if (!newSeparationRequests.some(r => r.students.includes(student.fullName) && r.students.includes(separateFullName))) {
+            newSeparationRequests.push({ students: [student.fullName, separateFullName], requestedBy: 'Import' });
+          }
         }
       }
     });
@@ -142,7 +162,7 @@ function App() {
   const downloadTemplate = () => {
     const headers = "Class,Surname,First Name,Gender,Academic,Behaviour,Request: Pair,Request: Separate";
     const example1 = "7A,Smith,Jane,Female,High,Good,John Doe,Tom Lee";
-    const example2 = "7B,Doe,John,Male,2,2,Jane Smith,";
+    const example2 = "7B,Doe,John,Male,2,2,Jane S,"; // Smart request example
     const example3 = "7A,Brown,Charlie,Male,Low,Needs Support,,";
     const csvContent = "data:text/csv;charset=utf-8," + 
       headers + "\n" + example1 + "\n" + example2 + "\n" + example3;
@@ -155,6 +175,39 @@ function App() {
     link.click();
     document.body.removeChild(link);
   };
+
+  // Function to export generated classes to CSV
+  const exportToCSV = () => {
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Year Level,Class Name,Student Name,Old Class,Gender,Academic,Behaviour\n";
+
+    Object.keys(generatedClasses).forEach(year => {
+      generatedClasses[year].forEach((cls, index) => {
+        const className = `Class ${index + 1}`;
+        cls.students.sort((a,b) => a.surname.localeCompare(b.surname)).forEach(student => {
+          const row = [
+            year,
+            className,
+            `"${student.fullName}"`, // Handle potential commas in names
+            student.existingClass,
+            student.gender,
+            student.academic,
+            student.behaviour
+          ].join(",");
+          csvContent += row + "\n";
+        });
+      });
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "generated_classes.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
 
   const violatesSeparation = (student, classStudents) => {
     for (const req of separationRequests) {
@@ -175,29 +228,43 @@ function App() {
       const numClasses = parseInt(config.numClasses, 10);
       if (numClasses === 0 || !year) return; // Skip if no classes or name
 
-      const yearStudents = allStudents.filter(s => 
+      // 1. Filter students for the current year level
+      const yearStudentList = allStudents.filter(s => 
         s.existingClass.startsWith(year.match(/\d+/)) // e.g., "7" from "Year 7"
       );
       
-      const availableStudents = yearStudents.length > 0 ? [...yearStudents] : [...allStudents];
+      const availableStudents = yearStudentList.length > 0 ? [...yearStudentList] : [...allStudents];
+      if (availableStudents.length === 0) return; // Nothing to do
 
+      // 2. Create empty classes
       const newClasses = Array.from({ length: numClasses }, () => ({
         students: [],
-        stats: { gender: {}, academic: {}, behaviour: {} },
-        existingClassCounts: {}
+        stats: { gender: {}, academic: {}, behaviour: {}, existingClass: {} },
       }));
 
-      // 1. Prioritize friend requests
+      // 3. Pre-calculate total counts for this year level (for balancing)
+      const yearTotals = { academic: {}, behaviour: {}, gender: {}, existingClass: {} };
+      const categories = ['academic', 'behaviour', 'gender', 'existingClass'];
+      for (const student of availableStudents) {
+        for (const category of categories) {
+          const value = student[category] || 'Unknown';
+          yearTotals[category][value] = (yearTotals[category][value] || 0) + 1;
+        }
+      }
+
+      // 4. Handle Friend Requests (pre-seeding)
       const unplacedStudents = [];
       friendRequests.forEach(req => {
         const [name1, name2] = req.students;
-        const s1Index = availableStudents.findIndex(s => s.fullName === name1);
-        const s2Index = availableStudents.findIndex(s => s.fullName === name2);
+        // Check if both students are in the available list and not yet placed
+        const s1Index = availableStudents.findIndex(s => s.fullName === name1 && !unplacedStudents.includes(s.id));
+        const s2Index = availableStudents.findIndex(s => s.fullName === name2 && !unplacedStudents.includes(s.id));
         
         if (s1Index > -1 && s2Index > -1) {
           const s1 = availableStudents[s1Index];
           const s2 = availableStudents[s2Index];
           
+          // Place them in the emptiest class
           newClasses.sort((a, b) => a.students.length - b.students.length);
           const bestClass = newClasses[0];
 
@@ -212,37 +279,84 @@ function App() {
         }
       });
       
-      let remainingStudents = availableStudents.filter(s => !unplacedStudents.includes(s.id));
-      remainingStudents.sort(() => Math.random() - 0.5); // Shuffle
+      let remainingStudents = availableStudents
+        .filter(s => !unplacedStudents.includes(s.id))
+        .sort(() => Math.random() - 0.5); // Shuffle
 
-      // 2. Distribute all remaining students
-      for (const student of remainingStudents) {
-        newClasses.sort((a, b) => {
-          const aFull = a.students.length >= classSizeRange.max;
-          const bFull = b.students.length >= classSizeRange.max;
-          if (aFull && !bFull) return 1;
-          if (!aFull && bFull) return -1;
-          
-          const violatesA = violatesSeparation(student, a.students);
-          const violatesB = violatesSeparation(student, b.students);
-          if (violatesA && !violatesB) return 1;
-          if (!violatesA && violatesB) return -1;
-          if (violatesA && violatesB) return 0;
+      // 5. Define Balancing Cost Functions
+      // This helper calculates the "cost" of adding a student's stat to a class
+      // It heavily penalizes making an existing imbalance worse.
+      const costForStat = (value, category, cls) => {
+        const totalCount = yearTotals[category][value] || 0;
+        const idealCountPerClass = totalCount / numClasses;
 
-          const countA = a.existingClassCounts[student.existingClass] || 0;
-          const countB = b.existingClassCounts[student.existingClass] || 0;
-          if (countA !== countB) return countA - countB;
-
-          return a.students.length - b.students.length;
-        });
-
-        const bestClass = newClasses[0];
+        const currentCount = (cls.stats[category] && cls.stats[category][value]) || 0;
         
-        if (bestClass.students.length < classSizeRange.max && !violatesSeparation(student, bestClass.students)) {
+        // "Badness" = squared deviation from the ideal mean
+        const currentBadness = Math.pow(currentCount - idealCountPerClass, 2);
+        const newBadness = Math.pow((currentCount + 1) - idealCountPerClass, 2);
+        
+        return newBadness - currentBadness; // Return the *increase* in badness
+      };
+
+      const calculatePlacementCost = (student, cls) => {
+        // 1. Hard Constraints (infinite cost)
+        if (cls.students.length >= classSizeRange.max) return Infinity;
+        if (violatesSeparation(student, cls.students)) return Infinity;
+
+        // 2. Weighted Balance Costs
+        let cost = 0;
+
+        // Weights: Academic and Behaviour are most important as requested
+        const W_ACADEMIC = 3.0;
+        const W_BEHAVIOUR = 3.0;
+        const W_GENDER = 2.0;
+        const W_EXISTING_CLASS = 1.0;
+        const W_CLASS_SIZE = 0.1; // Tie-breaker to prefer smaller classes
+
+        cost += W_ACADEMIC * costForStat(student.academic, 'academic', cls);
+        cost += W_BEHAVIOUR * costForStat(student.behaviour, 'behaviour', cls);
+        cost += W_GENDER * costForStat(student.gender, 'gender', cls);
+        cost += W_EXISTING_CLASS * costForStat(student.existingClass, 'existingClass', cls);
+        
+        // This acts as a tie-breaker, encouraging even class sizes
+        cost += W_CLASS_SIZE * cls.students.length;
+
+        return cost;
+      };
+
+      // 6. Distribute all remaining students based on lowest cost
+      for (const student of remainingStudents) {
+        let bestClass = null;
+        let minCost = Infinity;
+
+        // Find the class with the minimum placement cost
+        // Shuffle classes to break ties randomly
+        const shuffledClasses = newClasses.sort(() => Math.random() - 0.5);
+
+        for (const cls of shuffledClasses) {
+          const cost = calculatePlacementCost(student, cls);
+          if (cost < minCost) {
+            minCost = cost;
+            bestClass = cls;
+          }
+        }
+
+        // Place student in the best class found
+        if (bestClass && minCost !== Infinity) {
           bestClass.students.push(student);
           updateClassStats(bestClass, student);
         } else {
-          console.warn(`Could not place student ${student.fullName}.`);
+          console.warn(`Could not place student ${student.fullName}. All classes full or violate constraints.`);
+          // If a student can't be placed, find the first class under max size
+          // and force-place them (better than leaving them out)
+          const fallbackClass = newClasses.find(c => c.students.length < classSizeRange.max);
+          if (fallbackClass) {
+            fallbackClass.students.push(student);
+            updateClassStats(fallbackClass, student);
+          } else {
+             console.error(`!!! FAILED TO PLACE ${student.fullName}. All classes are full.`);
+          }
         }
       }
       classesByYear[year] = newClasses;
@@ -256,31 +370,23 @@ function App() {
     const gender = student.gender || 'Unknown';
     const academic = student.academic || 'Unknown';
     const behaviour = student.behaviour || 'Unknown';
+    const existingClass = student.existingClass || 'Unknown';
 
     cls.stats.gender[gender] = (cls.stats.gender[gender] || 0) + 1;
     cls.stats.academic[academic] = (cls.stats.academic[academic] || 0) + 1;
     cls.stats.behaviour[behaviour] = (cls.stats.behaviour[behaviour] || 0) + 1;
-    cls.existingClassCounts[student.existingClass] = (cls.existingClassCounts[student.existingClass] || 0) + 1;
-  };
-
-  const getBalanceColor = (value, total, idealRange) => {
-    if (total === 0) return '';
-    const percentage = (value / total) * 100;
-    if (percentage >= idealRange.min && percentage <= idealRange.max) {
-      return 'bg-green-100'; // Good balance
-    } else if (percentage >= idealRange.min * 0.75 && percentage <= idealRange.max * 1.25) {
-      return 'bg-yellow-100'; // Acceptable balance
-    }
-    return 'bg-red-100'; // Poor balance
+    cls.stats.existingClass[existingClass] = (cls.stats.existingClass[existingClass] || 0) + 1;
   };
 
   const getFriendSeparationHighlight = (studentName, classStudents) => {
     let highlight = '';
+    // Check for friend pairings (Green)
     friendRequests.forEach(req => {
       if (req.students.includes(studentName) && classStudents.some(s => req.students.includes(s.fullName) && s.fullName !== studentName)) {
-        highlight = 'bg-blue-200'; // Friend pair
+        highlight = 'bg-green-200'; // Friend pair
       }
     });
+    // Check for separation violations (Red)
     separationRequests.forEach(req => {
       if (req.students.includes(studentName) && classStudents.some(s => req.students.includes(s.fullName) && s.fullName !== studentName)) {
         highlight = 'bg-red-200'; // Separation violation
@@ -303,7 +409,7 @@ function App() {
           <textarea
             id="studentNames"
             className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mb-4 h-32"
-            placeholder="Class    Surname    First Name    Gender    Academic    Behaviour    Request: Pair    Request: Separate&#10;7A    Smith    Jane    Female    High    Good    John Doe    Tom Lee&#10;7B    Doe    John    Male    2    2    Jane Smith    "
+            placeholder="Class    Surname    First Name    Gender    Academic    Behaviour    Request: Pair    Request: Separate&#10;7A    Smith    Jane    Female    High    Good    John D    Tom Lee&#10;7B    Doe    John    Male    2    2    Jane Smith    "
             onChange={handleStudentNamesInput}
           ></textarea>
           <p className="text-gray-600 text-xs mb-4">
@@ -321,7 +427,7 @@ function App() {
             className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
           />
           <p className="text-gray-600 text-xs mt-2 mb-4">
-            Academic/Behaviour columns can use: `High/Medium/Low`, `3/2/1`, or `Above/At/Below`.
+            Request columns can use partial names (e.g., "John D").
           </p>
           <button
             onClick={downloadTemplate}
@@ -411,7 +517,16 @@ function App() {
       {/* Generated Classes Output */}
       {Object.keys(generatedClasses).length > 0 && (
         <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-2xl font-semibold mb-6 text-gray-700">Generated Classes</h2>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-semibold text-gray-700">Generated Classes</h2>
+            <button
+              onClick={exportToCSV}
+              className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+            >
+              Export to CSV
+            </button>
+          </div>
+          
           {Object.keys(generatedClasses).map(year => (
             <div key={year} className="mb-8">
               <h3 className="text-xl font-bold mb-4 text-gray-800">{year} Classes</h3>
@@ -424,8 +539,8 @@ function App() {
                         <tr>
                           <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student Name</th>
                           <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Old Class</th>
-                          <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gender</th>
                           <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Academic</th>
+                          <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Behaviour</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
@@ -433,8 +548,8 @@ function App() {
                           <tr key={student.id} className={getFriendSeparationHighlight(student.fullName, cls.students)}>
                             <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{student.fullName}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.existingClass}</td>
-                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.gender}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.academic}</td>
+                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.behaviour}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -446,7 +561,7 @@ function App() {
                         <div>
                           <p className="font-medium">Gender:</p>
                           {Object.entries(cls.stats.gender).map(([gender, count]) => (
-                            <p key={gender} className={`px-2 py-1 rounded-md ${getBalanceColor(count, cls.students.length, { min: 30, max: 70 })}`}>
+                            <p key={gender} className={`px-2 py-1 rounded-md`}>
                               {gender}: {count}
                             </p>
                           ))}
@@ -454,7 +569,7 @@ function App() {
                         <div>
                           <p className="font-medium">Academic:</p>
                           {Object.entries(cls.stats.academic).map(([academic, count]) => (
-                            <p key={academic} className={`px-2 py-1 rounded-md ${getBalanceColor(count, cls.students.length, { min: 20, max: 40 })}`}>
+                            <p key={academic} className={`px-2 py-1 rounded-md`}>
                               {academic}: {count}
                             </p>
                           ))}
@@ -462,14 +577,14 @@ function App() {
                         <div>
                           <p className="font-medium">Behaviour:</p>
                           {Object.entries(cls.stats.behaviour).map(([behaviour, count]) => (
-                            <p key={behaviour} className={`px-2 py-1 rounded-md ${getBalanceColor(count, cls.students.length, { min: 20, max: 40 })}`}>
+                            <p key={behaviour} className={`px-2 py-1 rounded-md`}>
                               {behaviour}: {count}
                             </p>
                           ))}
                         </div>
                         <div>
                           <p className="font-medium">Previous Class:</p>
-                          {Object.entries(cls.existingClassCounts).map(([className, count]) => (
+                          {Object.entries(cls.stats.existingClass).map(([className, count]) => (
                             <p key={className} className={`px-2 py-1 rounded-md`}>
                               {className}: {count}
                             </p>
