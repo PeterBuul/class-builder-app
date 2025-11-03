@@ -228,7 +228,7 @@ function App() {
           const violatesA = violatesSeparation(student, a.students);
           const violatesB = violatesSeparation(student, b.students);
           if (violatesA && !violatesB) return 1;
-          if (!violatesA && violationsB) return -1;
+          if (!violatesA && violatesB) return -1;
           if (violatesA && violatesB) return 0;
 
           const countA = a.existingClassCounts[student.existingClass] || 0;
