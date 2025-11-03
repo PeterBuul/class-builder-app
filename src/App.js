@@ -228,7 +228,7 @@ function App() {
           const violatesA = violatesSeparation(student, a.students);
           const violatesB = violatesSeparation(student, b.students);
           if (violatesA && !violatesB) return 1;
-          if (!violatesA && violatesB) return -1;
+          if (!violatesA && violationsB) return -1;
           if (violatesA && violatesB) return 0;
 
           const countA = a.existingClassCounts[student.existingClass] || 0;
@@ -444,11 +444,13 @@ function App() {
 
                     <div className="text-sm">
                       <h5 className="font-semibold mt-4 mb-2 text-gray-700">Class Balance:</h5>
-                      <div className.="grid grid-cols-2 gap-2">
+                      {/* FIX: Removed extra '.' from className */}
+                      <div className="grid grid-cols-2 gap-2">
                         <div>
                           <p className="font-medium">Gender:</p>
                           {Object.entries(cls.stats.gender).map(([gender, count]) => (
-                            <p key={gender} className={`px-2 py-1 rounded-md ${getBalanceColor(count, cls.Jstudents.length, { min: 30, max: 70 })}`}>
+                            // FIX: Removed extra 'J' from cls.students
+                            <p key={gender} className={`px-2 py-1 rounded-md ${getBalanceColor(count, cls.students.length, { min: 30, max: 70 })}`}>
                               {gender}: {count}
                             </p>
                           ))}
