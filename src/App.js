@@ -210,14 +210,21 @@ function App() {
     
     wsData.push(headerRow);
     wsData.push(subHeaderRow);
+
+    // *** THIS IS THE FIX ***
+    // Pre-sort all student lists ONCE to avoid functions in a loop
+    const sortedAllClasses = allclasses.map(cls => ({
+      ...cls,
+      students: cls.students.sort((a,b) => a.surname.localeCompare(b.surname))
+    }));
     
     // 2. Create Data Rows
     for (let i = 0; i < maxLen; i++) {
       const row = [];
       colIndex = 0;
-      allclasses.forEach((cls) => {
-        const sortedStudents = cls.students.sort((a,b) => a.surname.localeCompare(b.surname));
-        const student = sortedStudents[i];
+      // Use the new pre-sorted list
+      sortedAllClasses.forEach((cls) => {
+        const student = cls.students[i]; // No sort needed here
         if (student) {
           row[colIndex] = student.fullName;
           row[colIndex+1] = student.existingClass;
@@ -294,15 +301,15 @@ function App() {
 
     for (let r = 2; r < maxLen + 2; r++) { // Start from data row (index 2)
       colIndex = 0;
-      for (let c = 0; c < allclasses.length; c++) {
+      // *** USE THE NEW SORTED LIST ***
+      for (let c = 0; c < sortedAllClasses.length; c++) {
         // Get the student for this row
-        const student = allclasses[c].students.sort((a,b) => a.surname.localeCompare(b.surname))[r-2];
+        const student = sortedAllClasses[c].students[r-2]; // No sort needed
         
         if (student) {
           const studentName = student.fullName;
-          const classStudents = allclasses[c].students;
+          const classStudents = sortedAllClasses[c].students;
           
-          // --- THIS IS THE FIX ---
           // Call the top-level function instead of defining a function in the loop
           const highlight = getFriendSeparationHighlight(studentName, classStudents);
           
