@@ -17,22 +17,22 @@ function App() {
     const newSeparationRequests = [];
 
     students.forEach(student => {
-      if (student.requests) {
-        const reqs = student.requests.split(';');
-        reqs.forEach(req => {
-          const reqTrimmed = req.trim();
-          if (reqTrimmed.toLowerCase().startsWith('pair:')) {
-            const friendName = reqTrimmed.substring(5).trim();
-            if (!newFriendRequests.some(r => r.students.includes(student.fullName) && r.students.includes(friendName))) {
-              newFriendRequests.push({ students: [student.fullName, friendName], requestedBy: 'Import' });
-            }
-          } else if (reqTrimmed.toLowerCase().startsWith('separate:')) {
-            const separateName = reqTrimmed.substring(9).trim();
-            if (!newSeparationRequests.some(r => r.students.includes(student.fullName) && r.students.includes(separateName))) {
-              newSeparationRequests.push({ students: [student.fullName, separateName], requestedBy: 'Import' });
-            }
-          }
-        });
+      // Logic for "Request: Pair"
+      if (student.requestPair) {
+        const friendName = student.requestPair.trim();
+        // Add request, avoiding duplicates
+        if (friendName && !newFriendRequests.some(r => r.students.includes(student.fullName) && r.students.includes(friendName))) {
+          newFriendRequests.push({ students: [student.fullName, friendName], requestedBy: 'Import' });
+        }
+      }
+      
+      // Logic for "Request: Separate"
+      if (student.requestSeparate) {
+        const separateName = student.requestSeparate.trim();
+        // Add request, avoiding duplicates
+        if (separateName && !newSeparationRequests.some(r => r.students.includes(student.fullName) && r.students.includes(separateName))) {
+          newSeparationRequests.push({ students: [student.fullName, separateName], requestedBy: 'Import' });
+        }
       }
     });
 
@@ -62,10 +62,10 @@ function App() {
         fullName: fullName || `Student ${index + 1}`,
         existingClass: row.Class || 'Unknown',
         gender: row.Gender || 'Unknown',
-        // Apply normalization
         academic: normalizeRanking(row.Academic || 'Average'),
         behaviour: normalizeRanking(row.Behaviour || 'Good'),
-        requests: row.Requests || '',
+        requestPair: row['Request: Pair'] || '',
+        requestSeparate: row['Request: Separate'] || '',
       };
     }).filter(s => s.fullName !== 'Student');
   };
@@ -81,6 +81,7 @@ function App() {
     const dataRows = (hasHeader ? rows.slice(1) : rows)
       .map(row => row.split('\t'));
 
+    // Map to new 8-column structure
     const dataObjects = dataRows.map(row => ({
       'Class': row[0],
       'Surname': row[1],
@@ -88,7 +89,8 @@ function App() {
       'Gender': row[3],
       'Academic': row[4],
       'Behaviour': row[5],
-      'Requests': row[6],
+      'Request: Pair': row[6],
+      'Request: Separate': row[7],
     }));
 
     setStudents(parseStudentData(dataObjects));
@@ -138,10 +140,10 @@ function App() {
 
   // Function to download a CSV template
   const downloadTemplate = () => {
-    const headers = "Class,Surname,First Name,Gender,Academic,Behaviour,Requests";
-    const example1 = "7A,Smith,Jane,Female,High,Good,Pair: John Doe; Separate: Tom Lee";
-    const example2 = "7B,Doe,John,Male,2,2,Pair: Jane Smith";
-    const example3 = "7A,Brown,Charlie,Male,Low,Needs Support,";
+    const headers = "Class,Surname,First Name,Gender,Academic,Behaviour,Request: Pair,Request: Separate";
+    const example1 = "7A,Smith,Jane,Female,High,Good,John Doe,Tom Lee";
+    const example2 = "7B,Doe,John,Male,2,2,Jane Smith,";
+    const example3 = "7A,Brown,Charlie,Male,Low,Needs Support,,";
     const csvContent = "data:text/csv;charset=utf-8," + 
       headers + "\n" + example1 + "\n" + example2 + "\n" + example3;
       
@@ -165,8 +167,6 @@ function App() {
 
   // Main logic to generate classes
   const generateClasses = () => {
-    // Filter students by year level (assuming year level is in the 'Class' name, e.g., "7A")
-    // This is a simple filter; can be made more robust
     const allStudents = [...students];
     const classesByYear = {};
 
@@ -175,12 +175,10 @@ function App() {
       const numClasses = parseInt(config.numClasses, 10);
       if (numClasses === 0 || !year) return; // Skip if no classes or name
 
-      // Simple filter:
       const yearStudents = allStudents.filter(s => 
         s.existingClass.startsWith(year.match(/\d+/)) // e.g., "7" from "Year 7"
       );
       
-      // If filter returns nothing, use all students (fallback)
       const availableStudents = yearStudents.length > 0 ? [...yearStudents] : [...allStudents];
 
       const newClasses = Array.from({ length: numClasses }, () => ({
@@ -305,11 +303,11 @@ function App() {
           <textarea
             id="studentNames"
             className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mb-4 h-32"
-            placeholder="Class    Surname    First Name    Gender    Academic    Behaviour    Requests&#10;7A    Smith    Jane    Female    High    Good    Pair: John Doe&#10;7B    Doe    John    Male    2    2    Separate: Tom Lee"
+            placeholder="Class    Surname    First Name    Gender    Academic    Behaviour    Request: Pair    Request: Separate&#10;7A    Smith    Jane    Female    High    Good    John Doe    Tom Lee&#10;7B    Doe    John    Male    2    2    Jane Smith    "
             onChange={handleStudentNamesInput}
           ></textarea>
           <p className="text-gray-600 text-xs mb-4">
-            Columns: **Class, Surname, First Name, Gender, Academic, Behaviour, Requests**
+            Columns: **Class, Surname, First Name, Gender, Academic, Behaviour, Request: Pair, Request: Separate**
           </p>
 
           <label htmlFor="fileUpload" className="block text-gray-700 text-sm font-bold mb-2">
@@ -444,12 +442,10 @@ function App() {
 
                     <div className="text-sm">
                       <h5 className="font-semibold mt-4 mb-2 text-gray-700">Class Balance:</h5>
-                      {/* FIX: Removed extra '.' from className */}
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <p className="font-medium">Gender:</p>
                           {Object.entries(cls.stats.gender).map(([gender, count]) => (
-                            // FIX: Removed extra 'J' from cls.students
                             <p key={gender} className={`px-2 py-1 rounded-md ${getBalanceColor(count, cls.students.length, { min: 30, max: 70 })}`}>
                               {gender}: {count}
                             </p>
