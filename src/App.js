@@ -176,36 +176,112 @@ function App() {
     document.body.removeChild(link);
   };
 
-  // Function to export generated classes to CSV
-  const exportToCSV = () => {
-    let csvContent = "data:text/csv;charset=utf-8,";
-    csvContent += "Year Level,Class Name,Student Name,Old Class,Gender,Academic,Behaviour\n";
+  // Function to export generated classes to XLSX
+  const exportToXLSX = () => {
+    const wb = XLSX.utils.book_new();
 
     Object.keys(generatedClasses).forEach(year => {
-      generatedClasses[year].forEach((cls, index) => {
-        const className = `Class ${index + 1}`;
-        cls.students.sort((a,b) => a.surname.localeCompare(b.surname)).forEach(student => {
-          const row = [
-            year,
-            className,
-            `"${student.fullName}"`, // Handle potential commas in names
-            student.existingClass,
-            student.gender,
-            student.academic,
-            student.behaviour
-          ].join(",");
-          csvContent += row + "\n";
-        });
-      });
-    });
+      const yearClasses = generatedClasses[year];
+      if (!yearClasses || yearClasses.length === 0) return;
 
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "generated_classes.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const wsData = [];
+      
+      // Find max class length
+      const maxLen = Math.max(...yearClasses.map(cls => cls.students.length));
+      
+      // 1. Create Headers (e.g., "Class 1", "Class 2")
+      const headerRow = [];
+      const subHeaderRow = [];
+      
+      yearClasses.forEach((cls, index) => {
+        headerRow.push(`Class ${index + 1} (${cls.students.length} students)`);
+        headerRow.push(null, null, null); // Merge cells for 4 columns
+        
+        subHeaderRow.push('Student Name', 'Old Class', 'Academic', 'Behaviour');
+      });
+      
+      wsData.push(headerRow);
+      wsData.push(subHeaderRow);
+      
+      // 2. Create Data Rows
+      for (let i = 0; i < maxLen; i++) {
+        const row = [];
+        yearClasses.forEach(cls => {
+          // Get sorted students once per class
+          const sortedStudents = cls.students.sort((a,b) => a.surname.localeCompare(b.surname));
+          const student = sortedStudents[i];
+          if (student) {
+            row.push(student.fullName);
+            row.push(student.existingClass);
+            row.push(student.academic);
+            row.push(student.behaviour);
+          } else {
+            row.push(null, null, null, null); // Empty cells
+          }
+        });
+        wsData.push(row);
+      }
+      
+      // 3. Create worksheet from array of arrays
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      
+      // 4. Add Merges
+      ws['!merges'] = [];
+      for (let i = 0; i < yearClasses.length; i++) {
+        ws['!merges'].push({
+          s: { c: i * 4, r: 0 }, // Start cell (col, row)
+          e: { c: (i * 4) + 3, r: 0 }  // End cell (col, row)
+        });
+      }
+      
+      // 5. Add Styling (Highlights)
+      const greenFill = { fill: { fgColor: { rgb: "FFC7EFCF" } } }; // Light Green
+      const redFill = { fill: { fgColor: { rgb: "FFFFC7CE" } } }; // Light Red
+
+      for (let r = 2; r < wsData.length; r++) { // Start from data row (index 2)
+        for (let c = 0; c < yearClasses.length; c++) {
+          const studentCellRef = XLSX.utils.encode_cell({ r: r, c: c * 4 });
+          const studentCell = ws[studentCellRef];
+          
+          if (studentCell && studentCell.v) {
+            const studentName = studentCell.v;
+            const classStudents = yearClasses[c].students;
+            
+            // Get highlight color
+            let highlight = '';
+            // Friend check
+            friendRequests.forEach(req => {
+              if (req.students.includes(studentName) && classStudents.some(s => req.students.includes(s.fullName) && s.fullName !== studentName)) {
+                highlight = 'green';
+              }
+            });
+            // Separation check
+            separationRequests.forEach(req => {
+              if (req.students.includes(studentName) && classStudents.some(s => req.students.includes(s.fullName) && s.fullName !== studentName)) {
+                highlight = 'red';
+              }
+            });
+            
+            // Apply style to cell
+            if (highlight === 'green') {
+              studentCell.s = greenFill;
+            } else if (highlight === 'red') {
+              studentCell.s = redFill;
+            }
+          }
+        }
+      }
+      
+      // 6. Add worksheet to workbook
+      XLSX.utils.book_append_sheet(wb, ws, year);
+    });
+    
+    // 7. Write and download
+    if (wb.SheetNames.length > 0) {
+      XLSX.writeFile(wb, "generated_classes.xlsx");
+    } else {
+      console.error("No data to export");
+    }
   };
 
 
@@ -520,10 +596,10 @@ function App() {
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-semibold text-gray-700">Generated Classes</h2>
             <button
-              onClick={exportToCSV}
+              onClick={exportToXLSX}
               className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
             >
-              Export to CSV
+              Export to .xlsx
             </button>
           </div>
           
