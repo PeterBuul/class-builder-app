@@ -24,14 +24,14 @@ function App() {
           const reqTrimmed = req.trim();
           if (reqTrimmed.toLowerCase().startsWith('pair:')) {
             const friendName = reqTrimmed.substring(5).trim();
-            // Add request, avoiding duplicates
-            if (!friendRequests.some(r => r.students.includes(student.fullName) && r.students.includes(friendName))) {
+            // FIX: Check against the new list being built, not the old state
+            if (!newFriendRequests.some(r => r.students.includes(student.fullName) && r.students.includes(friendName))) {
               newFriendRequests.push({ students: [student.fullName, friendName], requestedBy: 'Import' });
             }
           } else if (reqTrimmed.toLowerCase().startsWith('separate:')) {
             const separateName = reqTrimmed.substring(9).trim();
-            // Add request, avoiding duplicates
-            if (!separationRequests.some(r => r.students.includes(student.fullName) && r.students.includes(separateName))) {
+            // FIX: Check against the new list being built, not the old state
+            if (!newSeparationRequests.some(r => r.students.includes(student.fullName) && r.students.includes(separateName))) {
               newSeparationRequests.push({ students: [student.fullName, separateName], requestedBy: 'Import' });
             }
           }
@@ -41,7 +41,7 @@ function App() {
 
     setFriendRequests(newFriendRequests);
     setSeparationRequests(newSeparationRequests);
-  }, [students]);
+  }, [students]); // Now the dependency array is correct
 
   const parseStudentData = (data) => {
     return data.map((row, index) => {
@@ -389,7 +389,7 @@ function App() {
                         <div>
                           <p className="font-medium">Previous Class:</p>
                           {Object.entries(cls.existingClassCounts).map(([className, count]) => (
-                            <p key={className} className={`px-2 py-1 rounded-md`}>
+Pos                          <p key={className} className={`px-2 py-1 rounded-md`}>
                               {className}: {count}
                             </p>
                           ))}
