@@ -454,6 +454,10 @@ function App() {
       finalClasses[groupName] = compositeClasses;
     }
 
+    // *** THIS IS THE FIX: ***
+    // Use the placedIds from the composite run
+    placedIds.forEach(id => allPlacedStudentIds.add(id));
+    
     setGeneratedClasses(finalClasses); // Set the final object
   };
 
