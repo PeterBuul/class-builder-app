@@ -297,7 +297,7 @@ function App() {
 
   // Main logic to generate classes
   const generateClasses = () => {
-    const allStudents = [...students];
+    let unplacedStudentsPool = [...students]; // FIX: Use 'let'
     const classesByGroup = {}; // Renamed from classesByYear
 
     // Iterate over each defined class group
@@ -308,8 +308,8 @@ function App() {
       
       if (numClasses === 0 || !groupName || yearLevels.length === 0) return; // Skip if no classes, name, or year levels
 
-      // 1. Filter students for the current class group (e.g., pull "5" and "6" for "5, 6")
-      const groupStudentList = allStudents.filter(s => {
+      // 1. Filter students from the *remaining pool*
+      const groupStudentList = unplacedStudentsPool.filter(s => { // FIX: Use unplacedStudentsPool
         const studentYear = s.existingClass.match(/\d+/); // Get the "7" from "7A"
         if (!studentYear) return false;
         return yearLevels.includes(studentYear[0]); // Check if "7" is in ["5", "6"]
@@ -335,12 +335,12 @@ function App() {
       }
 
       // 4. Handle Friend Requests (pre-seeding)
-      const unplacedStudents = [];
+      const placedStudentIds = []; // FIX: Track placed students *per group*
       friendRequests.forEach(req => {
         const [name1, name2] = req.students;
-        // Check if both students are in the available list and not yet placed
-        const s1Index = availableStudents.findIndex(s => s.fullName === name1 && !unplacedStudents.includes(s.id));
-        const s2Index = availableStudents.findIndex(s => s.fullName === name2 && !unplacedStudents.includes(s.id));
+        // Check if both students are in this group's available list
+        const s1Index = availableStudents.findIndex(s => s.fullName === name1);
+        const s2Index = availableStudents.findIndex(s => s.fullName === name2);
         
         if (s1Index > -1 && s2Index > -1) {
           const s1 = availableStudents[s1Index];
@@ -354,7 +354,7 @@ function App() {
             bestClass.students.push(s1, s2);
             updateClassStats(bestClass, s1);
             updateClassStats(bestClass, s2);
-            unplacedStudents.push(s1.id, s2.id);
+            placedStudentIds.push(s1.id, s2.id); // FIX: Add to placed list
           } else {
             console.warn(`Could not place friend request for ${name1} and ${name2}`);
           }
@@ -362,7 +362,7 @@ function App() {
       });
       
       let remainingStudents = availableStudents
-        .filter(s => !unplacedStudents.includes(s.id))
+        .filter(s => !placedStudentIds.includes(s.id)) // FIX: Filter against group's placed list
         .sort(() => Math.random() - 0.5); // Shuffle
 
       // 5. Define Balancing Cost Functions
@@ -426,6 +426,7 @@ function App() {
         if (bestClass && minCost !== Infinity) {
           bestClass.students.push(student);
           updateClassStats(bestClass, student);
+          placedStudentIds.push(student.id); // FIX: Add to placed list
         } else {
           console.warn(`Could not place student ${student.fullName}. All classes full or violate constraints.`);
           // If a student can't be placed, find the first class under max size
@@ -434,12 +435,16 @@ function App() {
           if (fallbackClass) {
             fallbackClass.students.push(student);
             updateClassStats(fallbackClass, student);
+            placedStudentIds.push(student.id); // FIX: Add to placed list
           } else {
              console.error(`!!! FAILED TO PLACE ${student.fullName}. All classes are full.`);
           }
         }
       }
       classesByGroup[groupName] = newClasses; // Save by groupName
+
+      // 7. Update the main unplaced pool
+      unplacedStudentsPool = unplacedStudentsPool.filter(s => !placedStudentIds.includes(s.id)); // FIX: Deplete the main pool
     });
 
     setGeneratedClasses(classesByGroup); // Set the final object
