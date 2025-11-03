@@ -5,26 +5,84 @@ function App() {
   const [students, setStudents] = useState([]);
   const [yearLevels, setYearLevels] = useState({});
   const [classSizeRange, setClassSizeRange] = useState({ min: 20, max: 30 });
-  const [parameters, setParameters] = useState({});
   const [friendRequests, setFriendRequests] = useState([]);
   const [separationRequests, setSeparationRequests] = useState([]);
   const [generatedClasses, setGeneratedClasses] = useState({});
 
+  // This effect now auto-parses the 'Requests' column from students
+  // to populate the friend and separation request logic.
   useEffect(() => {
-    const initialParameters = {};
+    const newFriendRequests = [];
+    const newSeparationRequests = [];
+
     students.forEach(student => {
-      initialParameters[student.name] = {
-        gender: student.gender || 'Unknown',
-        academic: student.academic || 'Average',
-        behaviour: student.behaviour || 'Good',
-      };
+      if (student.requests) {
+        // Simple parser: "Pair: John Doe" or "Separate: Jane Smith"
+        // Can be separated by semicolons
+        const reqs = student.requests.split(';');
+        reqs.forEach(req => {
+          const reqTrimmed = req.trim();
+          if (reqTrimmed.toLowerCase().startsWith('pair:')) {
+            const friendName = reqTrimmed.substring(5).trim();
+            // Add request, avoiding duplicates
+            if (!friendRequests.some(r => r.students.includes(student.fullName) && r.students.includes(friendName))) {
+              newFriendRequests.push({ students: [student.fullName, friendName], requestedBy: 'Import' });
+            }
+          } else if (reqTrimmed.toLowerCase().startsWith('separate:')) {
+            const separateName = reqTrimmed.substring(9).trim();
+            // Add request, avoiding duplicates
+            if (!separationRequests.some(r => r.students.includes(student.fullName) && r.students.includes(separateName))) {
+              newSeparationRequests.push({ students: [student.fullName, separateName], requestedBy: 'Import' });
+            }
+          }
+        });
+      }
     });
-    setParameters(initialParameters);
+
+    setFriendRequests(newFriendRequests);
+    setSeparationRequests(newSeparationRequests);
   }, [students]);
 
+  const parseStudentData = (data) => {
+    return data.map((row, index) => {
+      const fullName = `${row['First Name'] || ''} ${row.Surname || ''}`.trim();
+      return {
+        id: Date.now() + Math.random() + index,
+        firstName: row['First Name'] || '',
+        surname: row.Surname || '',
+        fullName: fullName || `Student ${index + 1}`,
+        existingClass: row.Class || 'Unknown',
+        gender: row.Gender || 'Unknown',
+        academic: row.Academic || 'Average',
+        behaviour: row.Behaviour || 'Good',
+        requests: row.Requests || '',
+      };
+    }).filter(s => s.fullName !== 'Student');
+  };
+
   const handleStudentNamesInput = (e) => {
-    const names = e.target.value.split('\n').map(name => ({ name: name.trim(), id: Date.now() + Math.random() }));
-    setStudents(names.filter(student => student.name !== ''));
+    const text = e.target.value;
+    const rows = text.split('\n').filter(row => row.trim() !== '');
+    
+    // Assume first row is header if it contains 'Surname' or 'Class'
+    const headerRow = rows[0].split('\t');
+    const hasHeader = headerRow.includes('Surname') || headerRow.includes('Class');
+    
+    const dataRows = (hasHeader ? rows.slice(1) : rows)
+      .map(row => row.split('\t'));
+
+    // Manually map columns based on user's request
+    const dataObjects = dataRows.map(row => ({
+      'Class': row[0],
+      'Surname': row[1],
+      'First Name': row[2],
+      'Gender': row[3],
+      'Academic': row[4],
+      'Behaviour': row[5],
+      'Requests': row[6],
+    }));
+
+    setStudents(parseStudentData(dataObjects));
   };
 
   const handleFileUpload = (e) => {
@@ -37,18 +95,12 @@ function App() {
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         const json = XLSX.utils.sheet_to_json(worksheet);
-        setStudents(json.map((row, index) => ({
-          name: row.Name || `Student ${index + 1}`,
-          gender: row.Gender || 'Unknown',
-          academic: row.Academic || 'Average',
-          behaviour: row.Behaviour || 'Good',
-          id: Date.now() + Math.random() + index
-        })));
+        setStudents(parseStudentData(json));
       };
       reader.readAsArrayBuffer(file);
     }
   };
-
+  
   const handleYearLevelChange = (year, value) => {
     setYearLevels(prev => ({ ...prev, [year]: parseInt(value, 10) || 0 }));
   };
@@ -57,114 +109,98 @@ function App() {
     setClassSizeRange(prev => ({ ...prev, [field]: parseInt(value, 10) || 0 }));
   };
 
-  const handleStudentParamChange = (studentName, param, value) => {
-    setParameters(prev => ({
-      ...prev,
-      [studentName]: {
-        ...prev[studentName],
-        [param]: value,
-      },
-    }));
-  };
-
-  const handleAddFriendRequest = () => {
-    setFriendRequests(prev => [...prev, { students: ['', ''], requestedBy: '' }]);
-  };
-
-  const handleFriendRequestChange = (index, field, value) => {
-    const newRequests = [...friendRequests];
-    if (field === 'student1' || field === 'student2') {
-      newRequests[index].students = newRequests[index].students.map((s, i) => (i === (field === 'student1' ? 0 : 1) ? value : s));
-    } else {
-      newRequests[index][field] = value;
+  const violatesSeparation = (student, classStudents) => {
+    for (const req of separationRequests) {
+      const [s1, s2] = req.students;
+      if (student.fullName === s1 && classStudents.some(s => s.fullName === s2)) return true;
+      if (student.fullName === s2 && classStudents.some(s => s.fullName === s1)) return true;
     }
-    setFriendRequests(newRequests);
-  };
-
-  const handleDeleteFriendRequest = (index) => {
-    setFriendRequests(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleAddSeparationRequest = () => {
-    setSeparationRequests(prev => [...prev, { students: ['', ''], requestedBy: '' }]);
-  };
-
-  const handleSeparationRequestChange = (index, field, value) => {
-    const newRequests = [...separationRequests];
-    if (field === 'student1' || field === 'student2') {
-      newRequests[index].students = newRequests[index].students.map((s, i) => (i === (field === 'student1' ? 0 : 1) ? value : s));
-    } else {
-      newRequests[index][field] = value;
-    }
-    setSeparationRequests(newRequests);
-  };
-
-  const handleDeleteSeparationRequest = (index) => {
-    setSeparationRequests(prev => prev.filter((_, i) => i !== index));
+    return false;
   };
 
   const generateClasses = () => {
-    const allStudents = students.map(s => ({ ...s, ...parameters[s.name] }));
+    const allStudents = [...students];
     const classesByYear = {};
 
     Object.keys(yearLevels).forEach(year => {
       const numClasses = yearLevels[year];
       if (numClasses === 0) return;
 
-      const yearStudents = allStudents; // Assuming all students are for one year level for simplicity, can be extended
-      const availableStudents = [...yearStudents];
+      const availableStudents = [...allStudents];
       const newClasses = Array.from({ length: numClasses }, () => ({
         students: [],
-        stats: { gender: { Male: 0, Female: 0, Unknown: 0 }, academic: {}, behaviour: {} }
+        stats: { gender: { Male: 0, Female: 0, Unknown: 0 }, academic: {}, behaviour: {} },
+        existingClassCounts: {} // <-- New property for blending
       }));
 
-      // Prioritize friend requests
+      // 1. Prioritize friend requests
+      const unplacedStudents = [];
       friendRequests.forEach(req => {
-        const s1 = availableStudents.find(s => s.name === req.students[0]);
-        const s2 = availableStudents.find(s => s.name === req.students[1]);
+        const [name1, name2] = req.students;
+        const s1Index = availableStudents.findIndex(s => s.fullName === name1);
+        const s2Index = availableStudents.findIndex(s => s.fullName === name2);
+        
+        if (s1Index > -1 && s2Index > -1) {
+          const s1 = availableStudents[s1Index];
+          const s2 = availableStudents[s2Index];
+          
+          // Find the best class (emptiest)
+          newClasses.sort((a, b) => a.students.length - b.students.length);
+          const bestClass = newClasses[0];
 
-        if (s1 && s2) {
-          let assigned = false;
-          for (const cls of newClasses) {
-            if (cls.students.length + 2 <= classSizeRange.max) {
-              cls.students.push(s1, s2);
-              updateClassStats(cls, s1);
-              updateClassStats(cls, s2);
-              availableStudents.splice(availableStudents.indexOf(s1), 1);
-              availableStudents.splice(availableStudents.indexOf(s2), 1);
-              assigned = true;
-              break;
-            }
-          }
-          if (!assigned) {
-            console.warn(`Could not place friend request for ${req.students[0]} and ${req.students[1]}`);
+          if (bestClass.students.length + 2 <= classSizeRange.max) {
+            bestClass.students.push(s1, s2);
+            updateClassStats(bestClass, s1);
+            updateClassStats(bestClass, s2);
+            // Remove from available, adding to a temporary list for removal
+            unplacedStudents.push(s1.id, s2.id);
+          } else {
+            console.warn(`Could not place friend request for ${name1} and ${name2}`);
           }
         }
       });
+      
+      let remainingStudents = availableStudents.filter(s => !unplacedStudents.includes(s.id));
+      
+      // Shuffle for randomness
+      remainingStudents.sort(() => Math.random() - 0.5);
 
-      // Distribute remaining students
-      while (availableStudents.length > 0) {
-        const student = availableStudents.shift();
-        let placed = false;
-        for (const cls of newClasses) {
-          if (cls.students.length < classSizeRange.max) {
-            // Check separation requests
-            const violatesSeparation = separationRequests.some(req =>
-              (req.students.includes(student.name) && cls.students.some(s => req.students.includes(s.name)))
-            );
-            if (!violatesSeparation) {
-              cls.students.push(student);
-              updateClassStats(cls, student);
-              placed = true;
-              break;
-            }
-          }
-        }
-        if (!placed) {
-          console.warn(`Could not place student ${student.name}. Class sizes might be too restrictive.`);
-          // If a student cannot be placed, add them back to available to avoid infinite loop
-          availableStudents.push(student);
-          break;
+      // 2. Distribute all remaining students
+      for (const student of remainingStudents) {
+        // Find the best class based on new rules
+        newClasses.sort((a, b) => {
+          // Rule 1: Check if class is full
+          const aFull = a.students.length >= classSizeRange.max;
+          const bFull = b.students.length >= classSizeRange.max;
+          if (aFull && !bFull) return 1;
+          if (!aFull && bFull) return -1;
+          
+          // Rule 2: Check separation requests
+          const violatesA = violatesSeparation(student, a.students);
+          const violatesB = violatesSeparation(student, b.students);
+          if (violatesA && !violatesB) return 1;
+          if (!violatesA && violatesB) return -1;
+          if (violatesA && violatesB) return 0; // Both bad
+
+          // Rule 3: Blend existing class (primary sort key)
+          const countA = a.existingClassCounts[student.existingClass] || 0;
+          const countB = b.existingClassCounts[student.existingClass] || 0;
+          if (countA !== countB) return countA - countB;
+
+          // Rule 4: Smallest class (secondary sort key)
+          return a.students.length - b.students.length;
+        });
+
+        const bestClass = newClasses[0];
+        
+        // Place student if class isn't full and doesn't violate separation
+        if (bestClass.students.length < classSizeRange.max && !violatesSeparation(student, bestClass.students)) {
+          bestClass.students.push(student);
+          updateClassStats(bestClass, student);
+          bestClass.existingClassCounts[student.existingClass] = (bestClass.existingClassCounts[student.existingClass] || 0) + 1;
+        } else {
+          console.warn(`Could not place student ${student.fullName}. All classes may be full or violate constraints.`);
+          // This student will not be placed.
         }
       }
       classesByYear[year] = newClasses;
@@ -177,6 +213,7 @@ function App() {
     cls.stats.gender[student.gender] = (cls.stats.gender[student.gender] || 0) + 1;
     cls.stats.academic[student.academic] = (cls.stats.academic[student.academic] || 0) + 1;
     cls.stats.behaviour[student.behaviour] = (cls.stats.behaviour[student.behaviour] || 0) + 1;
+    cls.existingClassCounts[student.existingClass] = (cls.existingClassCounts[student.existingClass] || 0) + 1;
   };
 
   const getBalanceColor = (value, total, idealRange) => {
@@ -194,14 +231,14 @@ function App() {
     let highlight = '';
     // Check for friend pairings
     friendRequests.forEach(req => {
-      if (req.students.includes(studentName) && classStudents.some(s => req.students.includes(s.name) && s.name !== studentName)) {
+      if (req.students.includes(studentName) && classStudents.some(s => req.students.includes(s.fullName) && s.fullName !== studentName)) {
         highlight = 'bg-blue-200'; // Friend pair
       }
     });
-    // Check for separation issues (if a student is in class with someone they should be separated from)
+    // Check for separation violations
     separationRequests.forEach(req => {
-      if (req.students.includes(studentName) && classStudents.some(s => req.students.includes(s.name) && s.name !== studentName)) {
-        highlight = 'bg-red-200'; // Separation violation (should not happen if generation logic is perfect)
+      if (req.students.includes(studentName) && classStudents.some(s => req.students.includes(s.fullName) && s.fullName !== studentName)) {
+        highlight = 'bg-red-200'; // Separation violation
       }
     });
     return highlight;
@@ -211,19 +248,22 @@ function App() {
     <div className="container mx-auto p-4 font-sans">
       <h1 className="text-3xl font-bold mb-6 text-gray-800">Class Builder App</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         {/* Student Input */}
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold mb-4 text-gray-700">Student Input</h2>
           <label htmlFor="studentNames" className="block text-gray-700 text-sm font-bold mb-2">
-            Paste Student Names (one per line):
+            Paste Tab-Separated Data (including header):
           </label>
           <textarea
             id="studentNames"
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mb-4 h-32"
-            placeholder="Alice Smith&#10;Bob Johnson&#10;Charlie Brown"
+            className="shadow appearance-none border rounded w-full py-2 px3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mb-4 h-32"
+            placeholder="Class    Surname    First Name    Gender    Academic    Behaviour    Requests&#10;7A    Smith    Jane    Female    High    Good    Pair: John Doe&#10;7B    Doe    John    Male    Average    Good    Separate: Tom Lee"
             onChange={handleStudentNamesInput}
           ></textarea>
+          <p className="text-gray-600 text-xs mb-4">
+            Columns: **Class, Surname, First Name, Gender, Academic, Behaviour, Requests**
+          </p>
 
           <label htmlFor="fileUpload" className="block text-gray-700 text-sm font-bold mb-2">
             Or Upload Spreadsheet (.xlsx, .csv):
@@ -235,7 +275,7 @@ function App() {
             onChange={handleFileUpload}
             className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
           />
-          <p className="text-gray-600 text-xs mt-2">Expected columns: Name, Gender, Academic, Behaviour</p>
+          <p className="text-gray-600 text-xs mt-2">Expected columns: **Class, Surname, First Name, Gender, Academic, Behaviour, Requests**</p>
         </div>
 
         {/* Class Parameters */}
@@ -278,145 +318,6 @@ function App() {
             </div>
           </div>
         </div>
-
-        {/* Student Parameters */}
-        <div className="bg-white p-6 rounded-lg shadow-md max-h-96 overflow-y-auto">
-          <h2 className="text-xl font-semibold mb-4 text-gray-700">Student Individual Parameters</h2>
-          {students.length === 0 && <p className="text-gray-500">Add students first to set parameters.</p>}
-          {students.map(student => (
-            <div key={student.id} className="mb-4 p-3 border rounded-md">
-              <h3 className="font-medium text-gray-800">{student.name}</h3>
-              <div className="flex flex-wrap gap-4 mt-2">
-                <div>
-                  <label className="block text-gray-700 text-xs font-bold mb-1">Gender:</label>
-                  <select
-                    value={parameters[student.name]?.gender || 'Unknown'}
-                    onChange={(e) => handleStudentParamChange(student.name, 'gender', e.target.value)}
-                    className="shadow border rounded py-1 px-2 text-gray-700 text-sm"
-                  >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Unknown">Unknown</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-gray-700 text-xs font-bold mb-1">Academic:</label>
-                  <select
-                    value={parameters[student.name]?.academic || 'Average'}
-                    onChange={(e) => handleStudentParamChange(student.name, 'academic', e.target.value)}
-                    className="shadow border rounded py-1 px-2 text-gray-700 text-sm"
-                  >
-                    <option value="High">High</option>
-                    <option value="Average">Average</option>
-                    <option value="Low">Low</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-gray-700 text-xs font-bold mb-1">Behaviour:</label>
-                  <select
-                    value={parameters[student.name]?.behaviour || 'Good'}
-                    onChange={(e) => handleStudentParamChange(student.name, 'behaviour', e.target.value)}
-                    className="shadow border rounded py-1 px-2 text-gray-700 text-sm"
-                  >
-                    <option value="Excellent">Excellent</option>
-                    <option value="Good">Good</option>
-                    <option value="Needs Support">Needs Support</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Friend Requests */}
-      <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-        <h2 className="text-xl font-semibold mb-4 text-gray-700">Friend Requests (Paired)</h2>
-        {friendRequests.map((req, index) => (
-          <div key={index} className="flex flex-wrap items-center gap-4 mb-3 p-3 border rounded-md relative">
-            <select
-              value={req.students[0]}
-              onChange={(e) => handleFriendRequestChange(index, 'student1', e.target.value)}
-              className="shadow border rounded py-1 px-2 text-gray-700 text-sm flex-1 min-w-[120px]"
-            >
-              <option value="">Select Student 1</option>
-              {students.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-            </select>
-            <span className="text-gray-600">and</span>
-            <select
-              value={req.students[1]}
-              onChange={(e) => handleFriendRequestChange(index, 'student2', e.target.value)}
-              className="shadow border rounded py-1 px-2 text-gray-700 text-sm flex-1 min-w-[120px]"
-            >
-              <option value="">Select Student 2</option>
-              {students.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-            </select>
-            <input
-              type="text"
-              value={req.requestedBy}
-              onChange={(e) => handleFriendRequestChange(index, 'requestedBy', e.target.value)}
-              className="shadow appearance-none border rounded py-1 px-2 text-gray-700 text-sm flex-1 min-w-[150px]"
-              placeholder="Requested by (Parent/Teacher)"
-            />
-            <button
-              onClick={() => handleDeleteFriendRequest(index)}
-              className="ml-2 bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-3 rounded focus:outline-none focus:shadow-outline text-sm"
-            >
-              Delete
-            </button>
-          </div>
-        ))}
-        <button
-          onClick={handleAddFriendRequest}
-          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mt-4"
-        >
-          Add Friend Request
-        </button>
-      </div>
-
-      {/* Separation Requests */}
-      <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-        <h2 className="text-xl font-semibold mb-4 text-gray-700">Separation Requests</h2>
-        {separationRequests.map((req, index) => (
-          <div key={index} className="flex flex-wrap items-center gap-4 mb-3 p-3 border rounded-md relative">
-            <select
-              value={req.students[0]}
-              onChange={(e) => handleSeparationRequestChange(index, 'student1', e.target.value)}
-              className="shadow border rounded py-1 px-2 text-gray-700 text-sm flex-1 min-w-[120px]"
-            >
-              <option value="">Select Student 1</option>
-              {students.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-            </select>
-            <span className="text-gray-600">and</span>
-            <select
-              value={req.students[1]}
-              onChange={(e) => handleSeparationRequestChange(index, 'student2', e.target.value)}
-              className="shadow border rounded py-1 px-2 text-gray-700 text-sm flex-1 min-w-[120px]"
-            >
-              <option value="">Select Student 2</option>
-              {students.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-            </select>
-            <input
-              type="text"
-              value={req.requestedBy}
-              onChange={(e) => handleSeparationRequestChange(index, 'requestedBy', e.target.value)}
-              className="shadow appearance-none border rounded py-1 px-2 text-gray-700 text-sm flex-1 min-w-[150px]"
-              placeholder="Requested by (Parent/Teacher)"
-            />
-            <button
-              onClick={() => handleDeleteSeparationRequest(index)}
-              className="ml-2 bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-3 rounded focus:outline-none focus:shadow-outline text-sm"
-            >
-              Delete
-            </button>
-          </div>
-        ))}
-        <button
-          onClick={handleAddSeparationRequest}
-          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mt-4"
-        >
-          Add Separation Request
-        </button>
       </div>
 
       <button
@@ -441,18 +342,18 @@ function App() {
                       <thead className="bg-gray-50">
                         <tr>
                           <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student Name</th>
+                          <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Old Class</th>
                           <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gender</th>
-                          <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Academic</th>
-                          <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Behaviour</th>
+                          <th scope="col" className="px-3 py-2 text-left text-xs font-m edium text-gray-500 uppercase tracking-wider">Academic</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {cls.students.map(student => (
-                          <tr key={student.id} className={getFriendSeparationHighlight(student.name, cls.students)}>
-                            <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{student.name}</td>
+                        {cls.students.sort((a,b) => a.surname.localeCompare(b.surname)).map(student => (
+                          <tr key={student.id} className={getFriendSeparationHighlight(student.fullName, cls.students)}>
+                            <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{student.fullName}</td>
+                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.existingClass}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.gender}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.academic}</td>
-                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.behaviour}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -482,6 +383,14 @@ function App() {
                           {Object.entries(cls.stats.behaviour).map(([behaviour, count]) => (
                             <p key={behaviour} className={`px-2 py-1 rounded-md ${getBalanceColor(count, cls.students.length, { min: 20, max: 40 })}`}>
                               {behaviour}: {count}
+                            </p>
+                          ))}
+                        </div>
+                        <div>
+                          <p className="font-medium">Previous Class:</p>
+                          {Object.entries(cls.existingClassCounts).map(([className, count]) => (
+                            <p key={className} className={`px-2 py-1 rounded-md`}>
+                              {className}: {count}
                             </p>
                           ))}
                         </div>
