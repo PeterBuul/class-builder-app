@@ -385,7 +385,9 @@ function App() {
   // Main logic to generate classes
   const generateClasses = () => {
     // 1. Get user inputs
-    const yearLevels = yearLevelsInput.split(',').map(s => s.trim().filter(Boolean));
+    // *** THIS IS THE FIX ***
+    // The .filter(Boolean) was being called on a string, not an array.
+    const yearLevels = yearLevelsInput.split(',').map(s => s.trim()).filter(Boolean);
     const numTotalClasses = totalClassesInput;
     const numCompositeClasses = compositeClassesInput;
     const numStraightClasses = numTotalClasses - numCompositeClasses;
@@ -399,7 +401,6 @@ function App() {
     const allPlacedStudentIds = new Set();
 
     // 2. Get all students for this entire group
-    // *** THIS IS THE CRITICAL FIX ***
     // Filter students whose class *starts with* any of the input years.
     const allGroupStudents = students.filter(s => {
       const studentClass = s.existingClass; // e.g., "4A" or "5/6A"
@@ -428,14 +429,14 @@ function App() {
       
       // Pro-rata calculation
       let numClassesForThisYear;
-      if (numStraightClasses === 0) {
+      if (numStraightClasses <= 0) {
          numClassesForThisYear = 0;
       } else if (index === yearLevels.length - 1) {
         // Last year level gets the remaining classes
         numClassesForThisYear = numStraightClasses - straightClassesCreated;
       } else {
         // Pro-rata based on number of students
-        numClassesForThisYear = Math.round((studentCount / totalStraightStudents) * numStraightClasses);
+        numClassesForThisYear = (totalStraightStudents > 0) ? Math.round((studentCount / totalStraightStudents) * numStraightClasses) : 0;
         straightClassesCreated += numClassesForThisYear;
       }
 
