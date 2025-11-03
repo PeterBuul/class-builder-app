@@ -211,7 +211,6 @@ function App() {
     wsData.push(headerRow);
     wsData.push(subHeaderRow);
 
-    // *** THIS IS THE FIX ***
     // Pre-sort all student lists ONCE to avoid functions in a loop
     const sortedAllClasses = allclasses.map(cls => ({
       ...cls,
@@ -219,12 +218,13 @@ function App() {
     }));
     
     // 2. Create Data Rows
-    for (let i = 0; i < maxLen; i++) {
+    for (let i = 0; i < maxLen; i++) { // Row loop (student index)
       const row = [];
       colIndex = 0;
-      // Use the new pre-sorted list
-      sortedAllClasses.forEach((cls) => {
-        const student = cls.students[i]; // No sort needed here
+      // Use a standard for loop instead of forEach
+      for (let c = 0; c < sortedAllClasses.length; c++) { // Column loop (class index)
+        const cls = sortedAllClasses[c];
+        const student = cls.students[i];
         if (student) {
           row[colIndex] = student.fullName;
           row[colIndex+1] = student.existingClass;
@@ -233,7 +233,7 @@ function App() {
         }
         // Spacer is implicitly null
         colIndex += 5;
-      });
+      }
       wsData.push(row);
     }
     
@@ -301,10 +301,9 @@ function App() {
 
     for (let r = 2; r < maxLen + 2; r++) { // Start from data row (index 2)
       colIndex = 0;
-      // *** USE THE NEW SORTED LIST ***
       for (let c = 0; c < sortedAllClasses.length; c++) {
         // Get the student for this row
-        const student = sortedAllClasses[c].students[r-2]; // No sort needed
+        const student = sortedAllClasses[c].students[r-2];
         
         if (student) {
           const studentName = student.fullName;
@@ -401,8 +400,13 @@ function App() {
     });
     
     let remainingStudents = availableStudents
-      .filter(s => !placedStudentIds.includes(s.id))
-      .sort(() => Math.random() - 0.5); // Shuffle
+      .filter(s => !placedStudentIds.includes(s.id));
+      
+    // Shuffle remainingStudents *outside* a loop
+    for (let i = remainingStudents.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [remainingStudents[i], remainingStudents[j]] = [remainingStudents[j], remainingStudents[i]];
+    }
 
     // 3. Define Balancing Cost Functions
     const costForStat = (value, category, cls) => {
@@ -430,7 +434,13 @@ function App() {
     for (const student of remainingStudents) {
       let bestClass = null;
       let minCost = Infinity;
-      const shuffledClasses = newClasses.sort(() => Math.random() - 0.5);
+
+      // Shuffle classes for tie-breaking
+      const shuffledClasses = [...newClasses]; // Create a copy
+      for (let i = shuffledClasses.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffledClasses[i], shuffledClasses[j]] = [shuffledClasses[j], shuffledClasses[i]];
+      }
 
       for (const cls of shuffledClasses) {
         const cost = calculatePlacementCost(student, cls);
