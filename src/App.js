@@ -3,8 +3,9 @@ import * as XLSX from 'xlsx';
 
 function App() {
   const [students, setStudents] = useState([]);
-  const [yearLevelConfigs, setYearLevelConfigs] = useState([
-    { id: Date.now(), name: 'Year 7', numClasses: 0 }
+  // Replaced yearLevelConfigs with classGroups for composite classes
+  const [classGroups, setClassGroups] = useState([
+    { id: Date.now(), groupName: 'Year 7 Group', yearLevels: '7', numClasses: 0 }
   ]);
   const [classSizeRange, setClassSizeRange] = useState({ min: 20, max: 30 });
   const [friendRequests, setFriendRequests] = useState([]);
@@ -133,26 +134,26 @@ function App() {
     }
   };
 
-  // --- Dynamic Year Level Functions ---
-  const handleYearLevelConfigChange = (id, field, value) => {
-    setYearLevelConfigs(prevConfigs =>
+  // --- Dynamic Class Group Functions ---
+  const handleClassGroupChange = (id, field, value) => {
+    setClassGroups(prevConfigs =>
       prevConfigs.map(config =>
         config.id === id ? { ...config, [field]: value } : config
       )
     );
   };
 
-  const addYearLevelConfig = () => {
-    setYearLevelConfigs(prevConfigs => [
+  const addClassGroup = () => {
+    setClassGroups(prevConfigs => [
       ...prevConfigs,
-      { id: Date.now(), name: `Year ${7 + prevConfigs.length}`, numClasses: 0 }
+      { id: Date.now(), groupName: 'New Group', yearLevels: '', numClasses: 0 }
     ]);
   };
 
-  const removeYearLevelConfig = (id) => {
-    setYearLevelConfigs(prevConfigs => prevConfigs.filter(config => config.id !== id));
+  const removeClassGroup = (id) => {
+    setClassGroups(prevConfigs => prevConfigs.filter(config => config.id !== id));
   };
-  // --- End Year Level Functions ---
+  // --- End Class Group Functions ---
 
   const handleClassSizeChange = (field, value) => {
     setClassSizeRange(prev => ({ ...prev, [field]: parseInt(value, 10) || 0 }));
@@ -180,8 +181,8 @@ function App() {
   const exportToXLSX = () => {
     const wb = XLSX.utils.book_new();
 
-    Object.keys(generatedClasses).forEach(year => {
-      const yearClasses = generatedClasses[year];
+    Object.keys(generatedClasses).forEach(groupName => {
+      const yearClasses = generatedClasses[groupName];
       if (!yearClasses || yearClasses.length === 0) return;
 
       const wsData = [];
@@ -273,7 +274,7 @@ function App() {
       }
       
       // 6. Add worksheet to workbook
-      XLSX.utils.book_append_sheet(wb, ws, year);
+      XLSX.utils.book_append_sheet(wb, ws, groupName);
     });
     
     // 7. Write and download
@@ -297,19 +298,24 @@ function App() {
   // Main logic to generate classes
   const generateClasses = () => {
     const allStudents = [...students];
-    const classesByYear = {};
+    const classesByGroup = {}; // Renamed from classesByYear
 
-    yearLevelConfigs.forEach(config => {
-      const year = config.name;
+    // Iterate over each defined class group
+    classGroups.forEach(config => {
+      const groupName = config.groupName;
       const numClasses = parseInt(config.numClasses, 10);
-      if (numClasses === 0 || !year) return; // Skip if no classes or name
-
-      // 1. Filter students for the current year level
-      const yearStudentList = allStudents.filter(s => 
-        s.existingClass.startsWith(year.match(/\d+/)) // e.g., "7" from "Year 7"
-      );
+      const yearLevels = config.yearLevels.split(',').map(s => s.trim()).filter(Boolean);
       
-      const availableStudents = yearStudentList.length > 0 ? [...yearStudentList] : [...allStudents];
+      if (numClasses === 0 || !groupName || yearLevels.length === 0) return; // Skip if no classes, name, or year levels
+
+      // 1. Filter students for the current class group (e.g., pull "5" and "6" for "5, 6")
+      const groupStudentList = allStudents.filter(s => {
+        const studentYear = s.existingClass.match(/\d+/); // Get the "7" from "7A"
+        if (!studentYear) return false;
+        return yearLevels.includes(studentYear[0]); // Check if "7" is in ["5", "6"]
+      });
+      
+      const availableStudents = groupStudentList;
       if (availableStudents.length === 0) return; // Nothing to do
 
       // 2. Create empty classes
@@ -318,13 +324,13 @@ function App() {
         stats: { gender: {}, academic: {}, behaviour: {}, existingClass: {} },
       }));
 
-      // 3. Pre-calculate total counts for this year level (for balancing)
-      const yearTotals = { academic: {}, behaviour: {}, gender: {}, existingClass: {} };
+      // 3. Pre-calculate total counts for this group (for balancing)
+      const groupTotals = { academic: {}, behaviour: {}, gender: {}, existingClass: {} };
       const categories = ['academic', 'behaviour', 'gender', 'existingClass'];
       for (const student of availableStudents) {
         for (const category of categories) {
           const value = student[category] || 'Unknown';
-          yearTotals[category][value] = (yearTotals[category][value] || 0) + 1;
+          groupTotals[category][value] = (groupTotals[category][value] || 0) + 1;
         }
       }
 
@@ -360,10 +366,8 @@ function App() {
         .sort(() => Math.random() - 0.5); // Shuffle
 
       // 5. Define Balancing Cost Functions
-      // This helper calculates the "cost" of adding a student's stat to a class
-      // It heavily penalizes making an existing imbalance worse.
       const costForStat = (value, category, cls) => {
-        const totalCount = yearTotals[category][value] || 0;
+        const totalCount = groupTotals[category][value] || 0;
         const idealCountPerClass = totalCount / numClasses;
 
         const currentCount = (cls.stats[category] && cls.stats[category][value]) || 0;
@@ -435,10 +439,10 @@ function App() {
           }
         }
       }
-      classesByYear[year] = newClasses;
+      classesByGroup[groupName] = newClasses; // Save by groupName
     });
 
-    setGeneratedClasses(classesByYear);
+    setGeneratedClasses(classesByGroup); // Set the final object
   };
 
   const updateClassStats = (cls, student) => {
@@ -517,31 +521,38 @@ function App() {
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold mb-4 text-gray-700">Class Parameters</h2>
           
-          {/* Dynamic Year Level Inputs */}
+          {/* Dynamic Class Group Inputs */}
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2">
-              Year Levels & Class Numbers:
+              Class Groups:
             </label>
-            {yearLevelConfigs.map(config => (
-              <div key={config.id} className="flex items-center gap-2 mb-2">
+            {classGroups.map(config => (
+              <div key={config.id} className="grid grid-cols-12 gap-2 mb-2">
                 <input
                   type="text"
-                  value={config.name}
-                  onChange={(e) => handleYearLevelConfigChange(config.id, 'name', e.target.value)}
-                  className="shadow appearance-none border rounded w-1/2 py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  placeholder="Year Level Name"
+                  value={config.groupName}
+                  onChange={(e) => handleClassGroupChange(config.id, 'groupName', e.target.value)}
+                  className="shadow appearance-none border rounded py-2 px-3 text-gray-700 col-span-4"
+                  placeholder="Group Name (e.g., '5/6 Comp')"
+                />
+                <input
+                  type="text"
+                  value={config.yearLevels}
+                  onChange={(e) => handleClassGroupChange(config.id, 'yearLevels', e.target.value)}
+                  className="shadow appearance-none border rounded py-2 px-3 text-gray-700 col-span-4"
+                  placeholder="Years (e.g., 5, 6)"
                 />
                 <input
                   type="number"
                   value={config.numClasses}
-                  onChange={(e) => handleYearLevelConfigChange(config.id, 'numClasses', parseInt(e.target.value, 10) || 0)}
-                  className="shadow appearance-none border rounded w-1/4 py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  onChange={(e) => handleClassGroupChange(config.id, 'numClasses', parseInt(e.target.value, 10) || 0)}
+                  className="shadow appearance-none border rounded py-2 px-3 text-gray-700 col-span-2"
                   placeholder="# Classes"
                   min="0"
                 />
                 <button
-                  onClick={() => removeYearLevelConfig(config.id)}
-                  className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-3 rounded focus:outline-none focus:shadow-outline"
+                  onClick={() => removeClassGroup(config.id)}
+                  className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-3 rounded col-span-2"
                   title="Remove"
                 >
                   &times;
@@ -549,17 +560,17 @@ function App() {
               </div>
             ))}
             <button
-              onClick={addYearLevelConfig}
+              onClick={addClassGroup}
               className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded focus:outline-none focus:shadow-outline text-sm mt-1"
             >
-              + Add Year Level
+              + Add Class Group
             </button>
           </div>
           
           {/* Class Size Range */}
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2">
-              Class Size Range:
+              Class Size Range (for all groups):
             </label>
             <div className="flex gap-4">
               <input
@@ -603,11 +614,11 @@ function App() {
             </button>
           </div>
           
-          {Object.keys(generatedClasses).map(year => (
-            <div key={year} className="mb-8">
-              <h3 className="text-xl font-bold mb-4 text-gray-800">{year} Classes</h3>
+          {Object.keys(generatedClasses).map(groupName => (
+            <div key={groupName} className="mb-8">
+              <h3 className="text-xl font-bold mb-4 text-gray-800">{groupName}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {generatedClasses[year].map((cls, index) => (
+                {generatedClasses[groupName].map((cls, index) => (
                   <div key={index} className="border border-gray-200 rounded-lg p-4 shadow-sm">
                     <h4 className="text-lg font-semibold mb-3 text-indigo-700">Class {index + 1} ({cls.students.length} students)</h4>
                     <table className="min-w-full divide-y divide-gray-200 mb-4">
