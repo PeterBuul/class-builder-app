@@ -3,10 +3,12 @@ import * as XLSX from 'xlsx';
 
 function App() {
   const [students, setStudents] = useState([]);
-  // Replaced yearLevelConfigs with classGroups for composite classes
-  const [classGroups, setClassGroups] = useState([
-    { id: Date.now(), groupName: 'Year 7 Group', yearLevels: '7', numClasses: 0 }
-  ]);
+  
+  // NEW: Simplified Class Parameters state
+  const [yearLevelsInput, setYearLevelsInput] = useState('7');
+  const [totalClassesInput, setTotalClassesInput] = useState(0);
+  const [compositeClassesInput, setCompositeClassesInput] = useState(0);
+
   const [classSizeRange, setClassSizeRange] = useState({ min: 20, max: 30 });
   const [friendRequests, setFriendRequests] = useState([]);
   const [separationRequests, setSeparationRequests] = useState([]);
@@ -133,27 +135,6 @@ function App() {
       reader.readAsArrayBuffer(file);
     }
   };
-
-  // --- Dynamic Class Group Functions ---
-  const handleClassGroupChange = (id, field, value) => {
-    setClassGroups(prevConfigs =>
-      prevConfigs.map(config =>
-        config.id === id ? { ...config, [field]: value } : config
-      )
-    );
-  };
-
-  const addClassGroup = () => {
-    setClassGroups(prevConfigs => [
-      ...prevConfigs,
-      { id: Date.now(), groupName: 'New Group', yearLevels: '', numClasses: 0 }
-    ]);
-  };
-
-  const removeClassGroup = (id) => {
-    setClassGroups(prevConfigs => prevConfigs.filter(config => config.id !== id));
-  };
-  // --- End Class Group Functions ---
 
   const handleClassSizeChange = (field, value) => {
     setClassSizeRange(prev => ({ ...prev, [field]: parseInt(value, 10) || 0 }));
@@ -295,159 +276,185 @@ function App() {
     return false;
   };
 
+  /**
+   * NEW: This is the core balancing logic, extracted into a reusable function.
+   */
+  const runBalancing = (studentPool, numClassesToMake) => {
+    if (numClassesToMake <= 0 || !studentPool || studentPool.length === 0) {
+      return [[], []]; // Return empty results
+    }
+
+    const availableStudents = [...studentPool];
+    const placedStudentIds = [];
+    const newClasses = Array.from({ length: numClassesToMake }, () => ({
+      students: [],
+      stats: { gender: {}, academic: {}, behaviour: {}, existingClass: {} },
+    }));
+
+    // 1. Pre-calculate totals for this specific pool
+    const groupTotals = { academic: {}, behaviour: {}, gender: {}, existingClass: {} };
+    const categories = ['academic', 'behaviour', 'gender', 'existingClass'];
+    for (const student of availableStudents) {
+      for (const category of categories) {
+        const value = student[category] || 'Unknown';
+        groupTotals[category][value] = (groupTotals[category][value] || 0) + 1;
+      }
+    }
+
+    // 2. Handle Friend Requests (pre-seeding)
+    friendRequests.forEach(req => {
+      const [name1, name2] = req.students;
+      const s1Index = availableStudents.findIndex(s => s.fullName === name1);
+      const s2Index = availableStudents.findIndex(s => s.fullName === name2);
+      
+      if (s1Index > -1 && s2Index > -1) {
+        const s1 = availableStudents[s1Index];
+        const s2 = availableStudents[s2Index];
+        
+        newClasses.sort((a, b) => a.students.length - b.students.length);
+        const bestClass = newClasses[0];
+
+        if (bestClass.students.length + 2 <= classSizeRange.max) {
+          bestClass.students.push(s1, s2);
+          updateClassStats(bestClass, s1);
+          updateClassStats(bestClass, s2);
+          placedStudentIds.push(s1.id, s2.id);
+        }
+      }
+    });
+    
+    let remainingStudents = availableStudents
+      .filter(s => !placedStudentIds.includes(s.id))
+      .sort(() => Math.random() - 0.5); // Shuffle
+
+    // 3. Define Balancing Cost Functions
+    const costForStat = (value, category, cls) => {
+      const totalCount = groupTotals[category][value] || 0;
+      const idealCountPerClass = totalCount / numClassesToMake;
+      const currentCount = (cls.stats[category] && cls.stats[category][value]) || 0;
+      const currentBadness = Math.pow(currentCount - idealCountPerClass, 2);
+      const newBadness = Math.pow((currentCount + 1) - idealCountPerClass, 2);
+      return newBadness - currentBadness;
+    };
+
+    const calculatePlacementCost = (student, cls) => {
+      if (cls.students.length >= classSizeRange.max) return Infinity;
+      if (violatesSeparation(student, cls.students)) return Infinity;
+      let cost = 0;
+      cost += 3.0 * costForStat(student.academic, 'academic', cls);
+      cost += 3.0 * costForStat(student.behaviour, 'behaviour', cls);
+      cost += 2.0 * costForStat(student.gender, 'gender', cls);
+      cost += 1.0 * costForStat(student.existingClass, 'existingClass', cls);
+      cost += 0.1 * cls.students.length;
+      return cost;
+    };
+
+    // 4. Distribute all remaining students based on lowest cost
+    for (const student of remainingStudents) {
+      let bestClass = null;
+      let minCost = Infinity;
+      const shuffledClasses = newClasses.sort(() => Math.random() - 0.5);
+
+      for (const cls of shuffledClasses) {
+        const cost = calculatePlacementCost(student, cls);
+        if (cost < minCost) {
+          minCost = cost;
+          bestClass = cls;
+        }
+      }
+
+      if (bestClass && minCost !== Infinity) {
+        bestClass.students.push(student);
+        updateClassStats(bestClass, student);
+        placedStudentIds.push(student.id);
+      } else {
+        const fallbackClass = newClasses.find(c => c.students.length < classSizeRange.max);
+        if (fallbackClass) {
+          fallbackClass.students.push(student);
+          updateClassStats(fallbackClass, student);
+          placedStudentIds.push(student.id);
+        } else {
+           console.error(`!!! FAILED TO PLACE ${student.fullName}. All classes are full.`);
+        }
+      }
+    }
+    return [newClasses, placedStudentIds];
+  }
+
   // Main logic to generate classes
   const generateClasses = () => {
-    let unplacedStudentsPool = [...students]; // FIX: Use 'let'
-    const classesByGroup = {}; // Renamed from classesByYear
+    const yearLevels = yearLevelsInput.split(',').map(s => s.trim()).filter(Boolean);
+    const numTotalClasses = totalClassesInput;
+    const numCompositeClasses = compositeClassesInput;
+    const numStraightClasses = numTotalClasses - numCompositeClasses;
 
-    // Iterate over each defined class group
-    classGroups.forEach(config => {
-      const groupName = config.groupName;
-      const numClasses = parseInt(config.numClasses, 10);
-      const yearLevels = config.yearLevels.split(',').map(s => s.trim()).filter(Boolean);
-      
-      if (numClasses === 0 || !groupName || yearLevels.length === 0) return; // Skip if no classes, name, or year levels
+    if (numTotalClasses <= 0 || yearLevels.length === 0) {
+      setGeneratedClasses({}); // Clear old results
+      return;
+    }
 
-      // 1. Filter students from the *remaining pool*
-      const groupStudentList = unplacedStudentsPool.filter(s => { // FIX: Use unplacedStudentsPool
-        const studentYear = s.existingClass.match(/\d+/); // Get the "7" from "7A"
-        if (!studentYear) return false;
-        return yearLevels.includes(studentYear[0]); // Check if "7" is in ["5", "6"]
-      });
-      
-      const availableStudents = groupStudentList;
-      if (availableStudents.length === 0) return; // Nothing to do
+    const finalClasses = {};
+    const allPlacedStudentIds = new Set();
 
-      // 2. Create empty classes
-      const newClasses = Array.from({ length: numClasses }, () => ({
-        students: [],
-        stats: { gender: {}, academic: {}, behaviour: {}, existingClass: {} },
-      }));
-
-      // 3. Pre-calculate total counts for this group (for balancing)
-      const groupTotals = { academic: {}, behaviour: {}, gender: {}, existingClass: {} };
-      const categories = ['academic', 'behaviour', 'gender', 'existingClass'];
-      for (const student of availableStudents) {
-        for (const category of categories) {
-          const value = student[category] || 'Unknown';
-          groupTotals[category][value] = (groupTotals[category][value] || 0) + 1;
-        }
-      }
-
-      // 4. Handle Friend Requests (pre-seeding)
-      const placedStudentIds = []; // FIX: Track placed students *per group*
-      friendRequests.forEach(req => {
-        const [name1, name2] = req.students;
-        // Check if both students are in this group's available list
-        const s1Index = availableStudents.findIndex(s => s.fullName === name1);
-        const s2Index = availableStudents.findIndex(s => s.fullName === name2);
-        
-        if (s1Index > -1 && s2Index > -1) {
-          const s1 = availableStudents[s1Index];
-          const s2 = availableStudents[s2Index];
-          
-          // Place them in the emptiest class
-          newClasses.sort((a, b) => a.students.length - b.students.length);
-          const bestClass = newClasses[0];
-
-          if (bestClass.students.length + 2 <= classSizeRange.max) {
-            bestClass.students.push(s1, s2);
-            updateClassStats(bestClass, s1);
-            updateClassStats(bestClass, s2);
-            placedStudentIds.push(s1.id, s2.id); // FIX: Add to placed list
-          } else {
-            console.warn(`Could not place friend request for ${name1} and ${name2}`);
-          }
-        }
-      });
-      
-      let remainingStudents = availableStudents
-        .filter(s => !placedStudentIds.includes(s.id)) // FIX: Filter against group's placed list
-        .sort(() => Math.random() - 0.5); // Shuffle
-
-      // 5. Define Balancing Cost Functions
-      const costForStat = (value, category, cls) => {
-        const totalCount = groupTotals[category][value] || 0;
-        const idealCountPerClass = totalCount / numClasses;
-
-        const currentCount = (cls.stats[category] && cls.stats[category][value]) || 0;
-        
-        // "Badness" = squared deviation from the ideal mean
-        const currentBadness = Math.pow(currentCount - idealCountPerClass, 2);
-        const newBadness = Math.pow((currentCount + 1) - idealCountPerClass, 2);
-        
-        return newBadness - currentBadness; // Return the *increase* in badness
-      };
-
-      const calculatePlacementCost = (student, cls) => {
-        // 1. Hard Constraints (infinite cost)
-        if (cls.students.length >= classSizeRange.max) return Infinity;
-        if (violatesSeparation(student, cls.students)) return Infinity;
-
-        // 2. Weighted Balance Costs
-        let cost = 0;
-
-        // Weights: Academic and Behaviour are most important as requested
-        const W_ACADEMIC = 3.0;
-        const W_BEHAVIOUR = 3.0;
-        const W_GENDER = 2.0;
-        const W_EXISTING_CLASS = 1.0;
-        const W_CLASS_SIZE = 0.1; // Tie-breaker to prefer smaller classes
-
-        cost += W_ACADEMIC * costForStat(student.academic, 'academic', cls);
-        cost += W_BEHAVIOUR * costForStat(student.behaviour, 'behaviour', cls);
-        cost += W_GENDER * costForStat(student.gender, 'gender', cls);
-        cost += W_EXISTING_CLASS * costForStat(student.existingClass, 'existingClass', cls);
-        
-        // This acts as a tie-breaker, encouraging even class sizes
-        cost += W_CLASS_SIZE * cls.students.length;
-
-        return cost;
-      };
-
-      // 6. Distribute all remaining students based on lowest cost
-      for (const student of remainingStudents) {
-        let bestClass = null;
-        let minCost = Infinity;
-
-        // Find the class with the minimum placement cost
-        // Shuffle classes to break ties randomly
-        const shuffledClasses = newClasses.sort(() => Math.random() - 0.5);
-
-        for (const cls of shuffledClasses) {
-          const cost = calculatePlacementCost(student, cls);
-          if (cost < minCost) {
-            minCost = cost;
-            bestClass = cls;
-          }
-        }
-
-        // Place student in the best class found
-        if (bestClass && minCost !== Infinity) {
-          bestClass.students.push(student);
-          updateClassStats(bestClass, student);
-          placedStudentIds.push(student.id); // FIX: Add to placed list
-        } else {
-          console.warn(`Could not place student ${student.fullName}. All classes full or violate constraints.`);
-          // If a student can't be placed, find the first class under max size
-          // and force-place them (better than leaving them out)
-          const fallbackClass = newClasses.find(c => c.students.length < classSizeRange.max);
-          if (fallbackClass) {
-            fallbackClass.students.push(student);
-            updateClassStats(fallbackClass, student);
-            placedStudentIds.push(student.id); // FIX: Add to placed list
-          } else {
-             console.error(`!!! FAILED TO PLACE ${student.fullName}. All classes are full.`);
-          }
-        }
-      }
-      classesByGroup[groupName] = newClasses; // Save by groupName
-
-      // 7. Update the main unplaced pool
-      unplacedStudentsPool = unplacedStudentsPool.filter(s => !placedStudentIds.includes(s.id)); // FIX: Deplete the main pool
+    // 1. Get all students for this entire group
+    const allGroupStudents = students.filter(s => {
+      const studentYear = s.existingClass.match(/\d+/); // Get "7" from "7A"
+      if (!studentYear) return false;
+      return yearLevels.includes(studentYear[0]);
     });
 
-    setGeneratedClasses(classesByGroup); // Set the final object
+    // 2. Create and count separate pools for each straight year level
+    const straightYearPools = {};
+    const straightYearCounts = {};
+    let totalStraightStudents = 0;
+
+    yearLevels.forEach(year => {
+      const yearPool = allGroupStudents.filter(s => s.existingClass.startsWith(year));
+      straightYearPools[year] = yearPool;
+      straightYearCounts[year] = yearPool.length;
+      totalStraightStudents += yearPool.length;
+    });
+
+    // 3. Generate STRAIGHT classes proportionally
+    let straightClassesCreated = 0;
+    yearLevels.forEach((year, index) => {
+      const studentCount = straightYearCounts[year];
+      
+      // Pro-rata calculation
+      let numClassesForThisYear;
+      if (index === yearLevels.length - 1) {
+        // Last year level gets the remaining classes
+        numClassesForThisYear = numStraightClasses - straightClassesCreated;
+      } else {
+        numClassesForThisYear = Math.round((studentCount / totalStraightStudents) * numStraightClasses);
+        straightClassesCreated += numClassesForThisYear;
+      }
+
+      const [newClasses, placedIds] = runBalancing(
+        straightYearPools[year], 
+        numClassesForThisYear
+      );
+
+      if (newClasses.length > 0) {
+        finalClasses[`Straight Year ${year}`] = newClasses;
+      }
+      placedIds.forEach(id => allPlacedStudentIds.add(id));
+    });
+
+    // 4. Generate COMPOSITE classes from the leftovers
+    const compositePool = allGroupStudents.filter(s => !allPlacedStudentIds.has(s.id));
+    
+    const [compositeClasses, placedIds] = runBalancing(
+      compositePool,
+      numCompositeClasses
+    );
+
+    if (compositeClasses.length > 0) {
+      const groupName = `Composite ${yearLevels.join('/')}`;
+      finalClasses[groupName] = compositeClasses;
+    }
+
+    setGeneratedClasses(finalClasses); // Set the final object
   };
 
   const updateClassStats = (cls, student) => {
@@ -526,56 +533,53 @@ function App() {
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold mb-4 text-gray-700">Class Parameters</h2>
           
-          {/* Dynamic Class Group Inputs */}
+          {/* NEW Simplified Class Group Inputs */}
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2">
-              Class Groups:
+              Year Levels (e.g., 7 or 5, 6)
             </label>
-            {classGroups.map(config => (
-              <div key={config.id} className="grid grid-cols-12 gap-2 mb-2">
-                <input
-                  type="text"
-                  value={config.groupName}
-                  onChange={(e) => handleClassGroupChange(config.id, 'groupName', e.target.value)}
-                  className="shadow appearance-none border rounded py-2 px-3 text-gray-700 col-span-4"
-                  placeholder="Group Name (e.g., '5/6 Comp')"
-                />
-                <input
-                  type="text"
-                  value={config.yearLevels}
-                  onChange={(e) => handleClassGroupChange(config.id, 'yearLevels', e.target.value)}
-                  className="shadow appearance-none border rounded py-2 px-3 text-gray-700 col-span-4"
-                  placeholder="Years (e.g., 5, 6)"
-                />
-                <input
-                  type="number"
-                  value={config.numClasses}
-                  onChange={(e) => handleClassGroupChange(config.id, 'numClasses', parseInt(e.target.value, 10) || 0)}
-                  className="shadow appearance-none border rounded py-2 px-3 text-gray-700 col-span-2"
-                  placeholder="# Classes"
-                  min="0"
-                />
-                <button
-                  onClick={() => removeClassGroup(config.id)}
-                  className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-3 rounded col-span-2"
-                  title="Remove"
-                >
-                  &times;
-                </button>
-              </div>
-            ))}
-            <button
-              onClick={addClassGroup}
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded focus:outline-none focus:shadow-outline text-sm mt-1"
-            >
-              + Add Class Group
-            </button>
+            <input
+              type="text"
+              value={yearLevelsInput}
+              onChange={(e) => setYearLevelsInput(e.target.value)}
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              placeholder="e.g., 7 or 5, 6"
+            />
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-gray-700 text-sm font-bold mb-2">
+              Total Number of Classes
+            </label>
+            <input
+              type="number"
+              value={totalClassesInput}
+              onChange={(e) => setTotalClassesInput(parseInt(e.target.value, 10) || 0)}
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              min="0"
+            />
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-gray-700 text-sm font-bold mb-2">
+              Number of Composite Classes
+            </label>
+            <input
+              type="number"
+              value={compositeClassesInput}
+              onChange={(e) => setCompositeClassesInput(parseInt(e.target.value, 10) || 0)}
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              min="0"
+            />
+             <p className="text-gray-600 text-xs mt-2">
+              Example: 6 Total Classes, 1 Composite = 5 Straight Classes (split proportionally) + 1 Composite Class (from leftovers).
+            </p>
           </div>
           
           {/* Class Size Range */}
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2">
-              Class Size Range (for all groups):
+              Class Size Range (for all classes):
             </label>
             <div className="flex gap-4">
               <input
