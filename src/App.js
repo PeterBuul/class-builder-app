@@ -189,23 +189,23 @@ function App() {
     }
     
     // 1. Create Headers
-    allclasses.forEach((cls, index) => {
+    let colIndex = 0;
+    allclasses.forEach((cls) => {
       const classTitle = `${cls.groupName} - Class ${cls.classIndex} (${cls.students.length} students)`;
 
-      headerRow.push(classTitle);
-      headerRow.push(null, null, null); // Merge for 4 columns
+      headerRow[colIndex] = classTitle;
       
-      subHeaderRow.push('Student Name', 'Old Class', 'Academic', 'Behaviour');
+      subHeaderRow[colIndex] = 'Student Name';
+      subHeaderRow[colIndex+1] = 'Old Class';
+      subHeaderRow[colIndex+2] = 'Academic';
+      subHeaderRow[colIndex+3] = 'Behaviour';
       
       // Set col widths
       colWidths.push({wch: 30}, {wch: 10}, {wch: 10}, {wch: 10});
 
       // Add spacer column
-      if (index < allclasses.length - 1) {
-        headerRow.push(null);
-        subHeaderRow.push(null);
-        colWidths.push({wch: 5}); // Spacer col width
-      }
+      colWidths.push({wch: 5}); // Spacer col width
+      colIndex += 5; // 4 for data + 1 for spacer
     });
     
     wsData.push(headerRow);
@@ -214,88 +214,93 @@ function App() {
     // 2. Create Data Rows
     for (let i = 0; i < maxLen; i++) {
       const row = [];
-      allclasses.forEach((cls, index) => {
+      colIndex = 0;
+      allclasses.forEach((cls) => {
         const sortedStudents = cls.students.sort((a,b) => a.surname.localeCompare(b.surname));
         const student = sortedStudents[i];
         if (student) {
-          row.push(student.fullName, student.existingClass, student.academic, student.behaviour);
-        } else {
-          row.push(null, null, null, null); // Empty cells
+          row[colIndex] = student.fullName;
+          row[colIndex+1] = student.existingClass;
+          row[colIndex+2] = student.academic;
+          row[colIndex+3] = student.behaviour;
         }
-        // Add spacer
-        if (index < allclasses.length - 1) {
-          row.push(null);
-        }
+        // Spacer is implicitly null
+        colIndex += 5;
       });
       wsData.push(row);
     }
     
     // 3. Add Stats Rows
     wsData.push([]); // Spacer row
-    const balanceTitleRow = [];
-    const genderData = ["Gender:"];
-    const academicData = ["Academic:"];
-    const behaviourData = ["Behaviour:"];
-    const existingData = ["Previous Class:"];
-
-    let colIndex = 0;
     const statsStartRow = wsData.length; // This is the row index where stats titles will start
+    
+    const balanceTitleRow = [];
+    const genderRow = [];
+    const academicRow = [];
+    const behaviourRow = [];
+    const existingRow = [];
 
-    allclasses.forEach((cls, i) => {
-      // Add title for this class
+    colIndex = 0;
+    allclasses.forEach((cls) => {
       balanceTitleRow[colIndex] = "--- Class Balance ---";
       
-      // Get stats as strings
-      genderData[colIndex] = Object.entries(cls.stats.gender).map(([k, v]) => `${k}: ${v}`).join(', ');
-      academicData[colIndex] = Object.entries(cls.stats.academic).map(([k, v]) => `${k}: ${v}`).join(', ');
-      behaviourData[colIndex] = Object.entries(cls.stats.behaviour).map(([k, v]) => `${k}: ${v}`).join(', ');
-      existingData[colIndex] = Object.entries(cls.stats.existingClass).map(([k, v]) => `${k}: ${v}`).join(', ');
+      genderRow[colIndex] = "Gender:";
+      genderRow[colIndex+1] = Object.entries(cls.stats.gender).map(([k, v])_ => `${k}: ${v}`).join(', ');
+      
+      academicRow[colIndex] = "Academic:";
+      academicRow[colIndex+1] = Object.entries(cls.stats.academic).map(([k, v]) => `${k}: ${v}`).join(', ');
+      
+      behaviourRow[colIndex] = "Behaviour:";
+      behaviourRow[colIndex+1] = Object.entries(cls.stats.behaviour).map(([k, v]) => `${k}: ${v}`).join(', ');
+
+      existingRow[colIndex] = "Previous Class:";
+      existingRow[colIndex+1] = Object.entries(cls.stats.existingClass).map(([k, v]) => `${k}: ${v}`).join(', ');
       
       colIndex += 5; // Move to the start of the next class block (4 cols + 1 spacer)
     });
     
-    wsData.push(balanceTitleRow, genderData, academicData, behaviourData, existingData);
+    wsData.push(balanceTitleRow, genderRow, academicRow, behaviourRow, existingRow);
 
     // 4. Create worksheet
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     
-    // 5. Add Merges (Headers)
+    // 5. Add Merges
     ws['!merges'] = [];
     colIndex = 0;
     for (let i = 0; i < allclasses.length; i++) {
+      // Header merge
       ws['!merges'].push({
         s: { c: colIndex, r: 0 }, // Start cell (col, row)
         e: { c: colIndex + 3, r: 0 }  // End cell (col, row)
       });
-      colIndex += 5; // 4 for class, 1 for spacer
-    }
-    
-    // 6. Add Merges (Stats Title)
-    colIndex = 0;
-    for (let i = 0; i < allclasses.length; i++) {
+      // Stats Title merge
       ws['!merges'].push({
         s: { c: colIndex, r: statsStartRow }, 
         e: { c: colIndex + 3, r: statsStartRow }
       });
-      colIndex += 5;
+      // Stats Data merges
+      ws['!merges'].push({ s: { c: colIndex+1, r: statsStartRow+1 }, e: { c: colIndex + 3, r: statsStartRow+1 } }); // Gender
+      ws['!merges'].push({ s: { c: colIndex+1, r: statsStartRow+2 }, e: { c: colIndex + 3, r: statsStartRow+2 } }); // Academic
+      ws['!merges'].push({ s: { c: colIndex+1, r: statsStartRow+3 }, e: { c: colIndex + 3, r: statsStartRow+3 } }); // Behaviour
+      ws['!merges'].push({ s: { c: colIndex+1, r: statsStartRow+4 }, e: { c: colIndex + 3, r: statsStartRow+4 } }); // Existing
+      
+      colIndex += 5; // 4 for class, 1 for spacer
     }
     
-    // 7. Add Styling (Highlights)
+    // 6. Add Styling (Highlights)
     const greenFill = { fill: { fgColor: { rgb: "FFC7EFCF" } } };
-    const redFill = { fill: { fgColor: { rgb: "FFFFC7CE" } } };
+    const redFill = { fill: { fgColor: { rgb: "FFFFC7CE" } } }; // Light Red
 
-    // Loop from r=2 (first data row) up to maxLen+1
-    for (let r = 2; r < maxLen + 2; r++) { 
+    for (let r = 2; r < maxLen + 2; r++) { // Start from data row (index 2)
       colIndex = 0;
       for (let c = 0; c < allclasses.length; c++) {
-        // Get the student for this row (r-2)
+        // Get the student for this row
         const student = allclasses[c].students.sort((a,b) => a.surname.localeCompare(b.surname))[r-2];
         
         if (student) {
           const studentName = student.fullName;
           const classStudents = allclasses[c].students;
           
-          // --- NEW HIGHLIGHT LOGIC ---
           let highlight = ''; // 'green', 'red'
           
           // Friend pairings first
@@ -313,17 +318,11 @@ function App() {
           });
           
           // Apply style to cell
-          if (highlight === 'green') {
+          if (highlight === 'green' || highlight === 'red') {
             const studentCellRef = XLSX.utils.encode_cell({ r: r, c: colIndex });
             const studentCell = ws[studentCellRef];
             if (studentCell) {
-              studentCell.s = greenFill;
-            }
-          } else if (highlight === 'red') {
-            const studentCellRef = XLSX.utils.encode_cell({ r: r, c: colIndex });
-            const studentCell = ws[studentCellRef];
-            if (studentCell) {
-              studentCell.s = redFill;
+              studentCell.s = (highlight === 'green') ? greenFill : redFill;
             }
           }
         }
@@ -331,13 +330,13 @@ function App() {
       }
     }
 
-    // 8. Set Column Widths
+    // 7. Set Column Widths
     ws['!cols'] = colWidths;
     
-    // 9. Add worksheet to workbook (only one sheet)
+    // 8. Add worksheet to workbook (only one sheet)
     XLSX.utils.book_append_sheet(wb, ws, "Generated Classes");
     
-    // 10. Write and download
+    // 9. Write and download
     XLSX.writeFile(wb, "generated_classes.xlsx");
   };
 
@@ -570,7 +569,6 @@ function App() {
       }
     });
     
-    // --- NEW HIGHLIGHT LOGIC ---
     // Separation requests override green
     separationRequests.forEach(req => {
       if (req.students.includes(studentName)) {
@@ -669,7 +667,7 @@ function App() {
             <input
               type="number"
               value={compositeClassesInput}
-              onChange={(e) => setCompositeClassesInput(parseInt(e.target.value, 10) || 0)}
+              onChange={(e) => setCompositeClassesInput(parseInt(e.gtarget.value, 10) || 0)}
               className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
               min="0"
             />
