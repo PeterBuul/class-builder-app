@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 function App() {
   const [students, setStudents] = useState([]);
   
-  // NEW: Simplified Class Parameters state
+  // Simplified Class Parameters state
   const [yearLevelsInput, setYearLevelsInput] = useState('7');
   const [totalClassesInput, setTotalClassesInput] = useState(0);
   const [compositeClassesInput, setCompositeClassesInput] = useState(0);
@@ -13,6 +13,10 @@ function App() {
   const [friendRequests, setFriendRequests] = useState([]);
   const [separationRequests, setSeparationRequests] = useState([]);
   const [generatedClasses, setGeneratedClasses] = useState({});
+
+  // Define stat orders
+  const academicOrder = ['High', 'Average', 'Low', 'Unknown'];
+  const behaviourOrder = ['Excellent', 'Good', 'Needs Support', 'Unknown'];
 
   // Auto-parse friend/separation requests from student data
   useEffect(() => {
@@ -69,6 +73,11 @@ function App() {
     if (['low', '1', 'below'].includes(val)) return 'Low';
     if (['at', '2', 'medium', 'average'].includes(val)) return 'Average';
     if (['above', '3', 'high'].includes(val)) return 'High';
+    // Handle behaviour specific
+    if (['excellent'].includes(val)) return 'Excellent';
+    if (['good'].includes(val)) return 'Good';
+    if (['needs support'].includes(val)) return 'Needs Support';
+    
     if (val === '') return 'Unknown';
     // Capitalize first letter if it's a non-standard value
     return val.charAt(0).toUpperCase() + val.slice(1);
@@ -211,7 +220,7 @@ function App() {
     wsData.push(headerRow);
     wsData.push(subHeaderRow);
 
-    // Pre-sort all student lists ONCE to avoid functions in a loop
+    // Pre-sort all student lists ONCE
     const sortedAllClasses = allclasses.map(cls => ({
       ...cls,
       students: cls.students.sort((a,b) => a.surname.localeCompare(b.surname))
@@ -221,7 +230,6 @@ function App() {
     for (let i = 0; i < maxLen; i++) { // Row loop (student index)
       const row = [];
       colIndex = 0;
-      // Use a standard for loop instead of forEach
       for (let c = 0; c < sortedAllClasses.length; c++) { // Column loop (class index)
         const cls = sortedAllClasses[c];
         const student = cls.students[i];
@@ -245,7 +253,6 @@ function App() {
     const genderRow = [];
     const academicRow = [];
     const behaviourRow = [];
-    const existingRow = [];
 
     colIndex = 0;
     allclasses.forEach((cls) => {
@@ -254,19 +261,21 @@ function App() {
       genderRow[colIndex] = "Gender:";
       genderRow[colIndex+1] = Object.entries(cls.stats.gender).map(([k, v]) => `${k}: ${v}`).join(', ');
       
+      // FIX: Use ordered stats
       academicRow[colIndex] = "Academic:";
-      academicRow[colIndex+1] = Object.entries(cls.stats.academic).map(([k, v]) => `${k}: ${v}`).join(', ');
+      academicRow[colIndex+1] = academicOrder
+        .map(level => `${level}: ${cls.stats.academic[level] || 0}`)
+        .join(', ');
       
       behaviourRow[colIndex] = "Behaviour:";
-      behaviourRow[colIndex+1] = Object.entries(cls.stats.behaviour).map(([k, v]) => `${k}: ${v}`).join(', ');
-
-      existingRow[colIndex] = "Previous Class:";
-      existingRow[colIndex+1] = Object.entries(cls.stats.existingClass).map(([k, v]) => `${k}: ${v}`).join(', ');
+      behaviourRow[colIndex+1] = behaviourOrder
+        .map(level => `${level}: ${cls.stats.behaviour[level] || 0}`)
+        .join(', ');
       
       colIndex += 5; // Move to the start of the next class block (4 cols + 1 spacer)
     });
     
-    wsData.push(balanceTitleRow, genderRow, academicRow, behaviourRow, existingRow);
+    wsData.push(balanceTitleRow, genderRow, academicRow, behaviourRow);
 
     // 4. Create worksheet
     const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -289,7 +298,6 @@ function App() {
       ws['!merges'].push({ s: { c: colIndex+1, r: statsStartRow+1 }, e: { c: colIndex + 3, r: statsStartRow+1 } }); // Gender
       ws['!merges'].push({ s: { c: colIndex+1, r: statsStartRow+2 }, e: { c: colIndex + 3, r: statsStartRow+2 } }); // Academic
       ws['!merges'].push({ s: { c: colIndex+1, r: statsStartRow+3 }, e: { c: colIndex + 3, r: statsStartRow+3 } }); // Behaviour
-      ws['!merges'].push({ s: { c: colIndex+1, r: statsStartRow+4 }, e: { c: colIndex + 3, r: statsStartRow+4 } }); // Existing
       
       colIndex += 5; // 4 for class, 1 for spacer
     }
@@ -309,7 +317,7 @@ function App() {
           const studentName = student.fullName;
           const classStudents = sortedAllClasses[c].students;
           
-          // Call the top-level function instead of defining a function in the loop
+          // Call the top-level function
           const highlight = getFriendSeparationHighlight(studentName, classStudents);
           
           // Apply style to cell
@@ -349,6 +357,29 @@ function App() {
       if (student.fullName === s2 && classStudents.some(s => s.fullName === s1)) return true;
     }
     return false;
+  };
+
+  // --- FIX: Moved balancing functions to top level to prevent build error ---
+
+  const costForStat = (value, category, cls, groupTotals, numClassesToMake) => {
+    const totalCount = groupTotals[category][value] || 0;
+    const idealCountPerClass = totalCount / numClassesToMake;
+    const currentCount = (cls.stats[category] && cls.stats[category][value]) || 0;
+    const currentBadness = Math.pow(currentCount - idealCountPerClass, 2);
+    const newBadness = Math.pow((currentCount + 1) - idealCountPerClass, 2);
+    return newBadness - currentBadness;
+  };
+
+  const calculatePlacementCost = (student, cls, groupTotals, numClassesToMake) => {
+    if (cls.students.length >= classSizeRange.max) return Infinity;
+    if (violatesSeparation(student, cls.students)) return Infinity;
+    let cost = 0;
+    cost += 3.0 * costForStat(student.academic, 'academic', cls, groupTotals, numClassesToMake);
+    cost += 3.0 * costForStat(student.behaviour, 'behaviour', cls, groupTotals, numClassesToMake);
+    cost += 2.0 * costForStat(student.gender, 'gender', cls, groupTotals, numClassesToMake);
+    cost += 1.0 * costForStat(student.existingClass, 'existingClass', cls, groupTotals, numClassesToMake);
+    cost += 0.1 * cls.students.length;
+    return cost;
   };
 
   /**
@@ -408,29 +439,7 @@ function App() {
         [remainingStudents[i], remainingStudents[j]] = [remainingStudents[j], remainingStudents[i]];
     }
 
-    // 3. Define Balancing Cost Functions
-    const costForStat = (value, category, cls) => {
-      const totalCount = groupTotals[category][value] || 0;
-      const idealCountPerClass = totalCount / numClassesToMake;
-      const currentCount = (cls.stats[category] && cls.stats[category][value]) || 0;
-      const currentBadness = Math.pow(currentCount - idealCountPerClass, 2);
-      const newBadness = Math.pow((currentCount + 1) - idealCountPerClass, 2);
-      return newBadness - currentBadness;
-    };
-
-    const calculatePlacementCost = (student, cls) => {
-      if (cls.students.length >= classSizeRange.max) return Infinity;
-      if (violatesSeparation(student, cls.students)) return Infinity;
-      let cost = 0;
-      cost += 3.0 * costForStat(student.academic, 'academic', cls);
-      cost += 3.0 * costForStat(student.behaviour, 'behaviour', cls);
-      cost += 2.0 * costForStat(student.gender, 'gender', cls);
-      cost += 1.0 * costForStat(student.existingClass, 'existingClass', cls);
-      cost += 0.1 * cls.students.length;
-      return cost;
-    };
-
-    // 4. Distribute all remaining students based on lowest cost
+    // 3. Distribute all remaining students based on lowest cost
     for (const student of remainingStudents) {
       let bestClass = null;
       let minCost = Infinity;
@@ -443,7 +452,8 @@ function App() {
       }
 
       for (const cls of shuffledClasses) {
-        const cost = calculatePlacementCost(student, cls);
+        // FIX: Call top-level function with correct params
+        const cost = calculatePlacementCost(student, cls, groupTotals, numClassesToMake);
         if (cost < minCost) {
           minCost = cost;
           bestClass = cls;
@@ -776,17 +786,21 @@ function App() {
                         </div>
                         <div>
                           <p className="font-medium">Academic:</p>
-                          {Object.entries(cls.stats.academic).map(([academic, count]) => (
-                            <p key={academic} className={`px-2 py-1 rounded-md`}>
-                              {academic}: {count}
+                          {/* FIX: Use ordered array */}
+                          {academicOrder.map(level => (
+                            (cls.stats.academic[level] > 0) &&
+                            <p key={level} className={`px-2 py-1 rounded-md`}>
+                              {level}: {cls.stats.academic[level]}
                             </p>
                           ))}
                         </div>
                         <div>
                           <p className="font-medium">Behaviour:</p>
-                          {Object.entries(cls.stats.behaviour).map(([behaviour, count]) => (
-                            <p key={behaviour} className={`px-2 py-1 rounded-md`}>
-                              {behaviour}: {count}
+                          {/* FIX: Use ordered array */}
+                          {behaviourOrder.map(level => (
+                            (cls.stats.behaviour[level] > 0) &&
+                            <p key={level} className={`px-2 py-1 rounded-md`}>
+                              {level}: {cls.stats.behaviour[level]}
                             </p>
                           ))}
                         </div>
