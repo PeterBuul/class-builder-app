@@ -245,7 +245,6 @@ function App() {
       balanceTitleRow[colIndex] = "--- Class Balance ---";
       
       genderRow[colIndex] = "Gender:";
-      // *** THIS IS THE FIX *** (Removed the stray '_')
       genderRow[colIndex+1] = Object.entries(cls.stats.gender).map(([k, v]) => `${k}: ${v}`).join(', ');
       
       academicRow[colIndex] = "Academic:";
@@ -291,6 +290,7 @@ function App() {
     // 6. Add Styling (Highlights)
     const greenFill = { fill: { fgColor: { rgb: "FFC7EFCF" } } };
     const redFill = { fill: { fgColor: { rgb: "FFFFC7CE" } } }; // Light Red
+    const darkRedFill = { fill: { fgColor: { rgb: "FFFF8F8F" } } }; // Darker Red for violations
 
     for (let r = 2; r < maxLen + 2; r++) { // Start from data row (index 2)
       colIndex = 0;
@@ -302,28 +302,22 @@ function App() {
           const studentName = student.fullName;
           const classStudents = allclasses[c].students;
           
-          let highlight = ''; // 'green', 'red'
-          
-          // Friend pairings first
-          friendRequests.forEach(req => {
-            if (req.students.includes(studentName) && classStudents.some(s => req.students.includes(s.fullName) && s.fullName !== studentName)) {
-              highlight = 'green'; // Friend pair
-            }
-          });
-
-          // Separation requests override
-          separationRequests.forEach(req => {
-            if (req.students.includes(studentName)) {
-              highlight = 'red'; // SEPARATION REQUESTED
-            }
-          });
+          // --- THIS IS THE FIX ---
+          // Call the top-level function instead of defining a function in the loop
+          const highlight = getFriendSeparationHighlight(studentName, classStudents);
           
           // Apply style to cell
-          if (highlight === 'green' || highlight === 'red') {
+          if (highlight === 'bg-green-200' || highlight === 'bg-red-200' || highlight === 'bg-red-500') {
             const studentCellRef = XLSX.utils.encode_cell({ r: r, c: colIndex });
             const studentCell = ws[studentCellRef];
             if (studentCell) {
-              studentCell.s = (highlight === 'green') ? greenFill : redFill;
+              if(highlight === 'bg-green-200') {
+                studentCell.s = greenFill;
+              } else if (highlight === 'bg-red-500') {
+                studentCell.s = darkRedFill; // Violation
+              } else {
+                studentCell.s = redFill; // Separation requested
+              }
             }
           }
         }
