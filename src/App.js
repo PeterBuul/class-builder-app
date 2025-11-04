@@ -16,7 +16,6 @@ function App() {
 
   // Define stat orders
   const academicOrder = ['High', 'Average', 'Low', 'Unknown'];
-  // FIX: Use the correct order that matches the normalizer
   const behaviourOrder = ['High', 'Average', 'Low', 'Needs Support', 'Excellent', 'Good', 'Unknown'];
 
   // Auto-parse friend/separation requests from student data
@@ -128,8 +127,6 @@ function App() {
 
     setStudents(parseStudentData(dataObjects));
   };
-
-  // *** FIX: REMOVED UNUSED handleFileUpload FUNCTION ***
 
   const handleClassSizeChange = (field, value) => {
     setClassSizeRange(prev => ({ ...prev, [field]: parseInt(value, 10) || 0 }));
@@ -294,7 +291,9 @@ function App() {
     }
     
     // 6. Add Styling (Highlights)
-    const boldStyle = { font: { bold: true } }; // Use bold style
+    const greenFill = { fill: { fgColor: { rgb: "FFC7EFCF" } } };
+    const redFill = { fill: { fgColor: { rgb: "FFFFC7CE" } } }; // Light Red
+    const darkRedFill = { fill: { fgColor: { rgb: "FFFF8F8F" } } }; // Darker Red for violations
 
     for (let r = 2; r < maxLen + 2; r++) { // Start from data row (index 2)
       colIndex = 0;
@@ -310,11 +309,15 @@ function App() {
           const highlight = getFriendSeparationHighlight(studentName, classStudents);
           
           // Apply style to cell
-          if (highlight === 'font-bold') { // Check for 'font-bold'
-            const studentCellRef = XLSX.utils.encode_cell({ r: r, c: colIndex });
-            const studentCell = ws[studentCellRef];
-            if (studentCell) {
-              studentCell.s = boldStyle; // Apply bold style
+          if (highlight === 'bg-green-200' || highlight === 'bg-red-200' || highlight === 'bg-red-500') {
+            const style = (highlight === 'bg-green-200') ? greenFill : (highlight === 'bg-red-500' ? darkRedFill : redFill);
+            
+            // Style all 4 cells
+            for (let i = 0; i < 4; i++) {
+              const cellRef = XLSX.utils.encode_cell({ r: r, c: colIndex + i });
+              // Ensure cell object exists
+              if (!ws[cellRef]) ws[cellRef] = { v: wsData[r][colIndex + i] };
+              ws[cellRef].s = style;
             }
           }
         }
@@ -566,20 +569,24 @@ function App() {
   };
 
   const getFriendSeparationHighlight = (studentName, classStudents) => {
-    // FIX: Change logic to return 'font-bold'
     let highlight = '';
-    
-    // Check for friend pairings
+    // Check for friend pairings (Green)
     friendRequests.forEach(req => {
       if (req.students.includes(studentName) && classStudents.some(s => req.students.includes(s.fullName) && s.fullName !== studentName)) {
-        highlight = 'font-bold';
+        highlight = 'bg-green-200'; // Friend pair
       }
     });
     
-    // Check for separation requests
+    // Separation requests override green
     separationRequests.forEach(req => {
       if (req.students.includes(studentName)) {
-        highlight = 'font-bold';
+        // Check for a VIOLATION (darker red)
+        if (classStudents.some(s => req.students.includes(s.fullName) && s.fullName !== studentName)) {
+          highlight = 'bg-red-500'; // VIOLATION - dark red
+        } else {
+          // SUCCESSFUL separation, but highlight them anyway
+          highlight = 'bg-red-200'; // SEPARATION REQUESTED - light red
+        }
       }
     });
     return highlight;
@@ -741,9 +748,8 @@ function App() {
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {cls.students.sort((a,b) => a.surname.localeCompare(b.surname)).map(student => (
-                          <tr key={student.id}>
-                            {/* FIX: Apply font-bold class here */}
-                            <td className={`px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900 ${getFriendSeparationHighlight(student.fullName, cls.students)}`}>{student.fullName}</td>
+                          <tr key={student.id} className={getFriendSeparationHighlight(student.fullName, cls.students)}>
+                            <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{student.fullName}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.existingClass}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.academic}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.behaviour}</td>
