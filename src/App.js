@@ -161,9 +161,9 @@ function App() {
     const subHeaderRow = [];
     const colWidths = [];
 
-    // Define styles for Excel export
-    const greenStyle = { font: { color: { rgb: "008000" }, bold: true } }; // Green
-    const redStyle = { font: { color: { rgb: "FF0000" }, bold: true } }; // Red
+    // --- FIX: Define styles for Excel export (background fill) ---
+    const greenFillStyle = { fill: { fgColor: { rgb: "C6EFCE" } } }; // Light Green Fill
+    const redFillStyle = { fill: { fgColor: { rgb: "FFC7CE" } } }; // Light Red Fill
 
     // Flatten all generated classes from all groups into one list
     const allclasses = [];
@@ -294,7 +294,7 @@ function App() {
       colIndex += 5; // 4 for class, 1 for spacer
     }
 
-    // 6. Add Styling (Highlights)
+    // 6. Add Styling (Highlights) - --- MODIFIED LOGIC ---
     for (let r = 2; r < maxLen + 2; r++) { // Start from data row (index 2)
       colIndex = 0;
       for (let c = 0; c < sortedAllClasses.length; c++) {
@@ -313,10 +313,10 @@ function App() {
           const studentCell = ws[studentCellRef];
 
           if (studentCell) {
-            if (highlight.includes('text-green-600')) {
-              studentCell.s = greenStyle; // Apply green style
-            } else if (highlight.includes('text-red-600')) {
-              studentCell.s = redStyle; // Apply red style
+            if (highlight.includes('bg-green-200')) {
+              studentCell.s = greenFillStyle; // Apply green fill
+            } else if (highlight.includes('bg-red-200')) {
+              studentCell.s = redFillStyle; // Apply red fill
             }
           }
         }
@@ -566,18 +566,11 @@ function App() {
 
   /**
    * --- THIS IS THE FIX ---
-   * This function now returns specific Tailwind classes for highlighting.
-   * 'text-green-600 font-bold' for successful pairs.
-   * 'text-red-600 font-bold' for violated separations.
+   * This function now returns Tailwind background classes.
+   * 'bg-green-200' for successful pairs.
+   * 'bg-red-200' for *any* student in a separation request.
    */
   const getFriendSeparationHighlight = (studentName, classStudents) => {
-    // Check for VIOLATED separation (RED)
-    // Find the student object to pass to violatesSeparation
-    const student = classStudents.find(s => s.fullName === studentName);
-    if (student && violatesSeparation(student, classStudents)) {
-      return 'text-red-600 font-bold'; // Violated separation
-    }
-
     // Check for SUCCESSFUL pairing (GREEN)
     for (const req of friendRequests) {
       const [s1, s2] = req.students;
@@ -586,8 +579,15 @@ function App() {
         // Is the *other* person also in the class?
         const partnerName = (studentName === s1) ? s2 : s1;
         if (classStudents.some(s => s.fullName === partnerName)) {
-          return 'text-green-600 font-bold'; // Successful pairing
+          return 'bg-green-200'; // Successful pairing
         }
+      }
+    }
+
+    // Check if student is in *any* separation request (RED)
+    for (const req of separationRequests) {
+      if (req.students.includes(studentName)) {
+        return 'bg-red-200'; // Is in a separation request
       }
     }
 
@@ -745,6 +745,7 @@ function App() {
                       <tbody>
                         {cls.students.sort((a, b) => a.surname.localeCompare(b.surname)).map(student => (
                           <tr key={student.id}>
+                            {/* --- FIX: Class applied here for background highlight, font remains black (text-gray-900) --- */}
                             <td className={`px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900 ${getFriendSeparationHighlight(student.fullName, cls.students)}`}>{student.fullName}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.existingClass}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.academic}</td>
