@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 
 function App() {
   const [students, setStudents] = useState([]);
-  
+
   // Simplified Class Parameters state
   const [yearLevelsInput, setYearLevelsInput] = useState('7');
   const [totalClassesInput, setTotalClassesInput] = useState(0);
@@ -27,7 +27,7 @@ function App() {
     const findStudentFullName = (partialName, allStudents) => {
       if (!partialName) return null;
       const pName = partialName.toLowerCase().trim();
-      
+
       // 1. Try exact full name match (case-insensitive)
       let match = allStudents.find(s => s.fullName.toLowerCase() === pName);
       if (match) return match.fullName;
@@ -35,7 +35,7 @@ function App() {
       // 2. Try "starts with" match (e.g., "John D" matches "John Doe")
       match = allStudents.find(s => s.fullName.toLowerCase().startsWith(pName));
       if (match) return match.fullName;
-      
+
       return null; // No match found
     };
 
@@ -50,7 +50,7 @@ function App() {
           }
         }
       }
-      
+
       // Logic for "Request: Separate"
       if (student.requestSeparate) {
         const separateFullName = findStudentFullName(student.requestSeparate, students);
@@ -77,7 +77,7 @@ function App() {
     if (['excellent'].includes(val)) return 'Excellent';
     if (['good'].includes(val)) return 'Good';
     if (['needs support'].includes(val)) return 'Needs Support';
-    
+
     if (val === '') return 'Unknown';
     // Capitalize first letter if it's a non-standard value
     return val.charAt(0).toUpperCase() + val.slice(1);
@@ -106,10 +106,10 @@ function App() {
   const handleStudentNamesInput = (e) => {
     const text = e.target.value;
     const rows = text.split('\n').filter(row => row.trim() !== '');
-    
+
     const headerRow = rows[0].split('\t');
     const hasHeader = headerRow.includes('Surname') || headerRow.includes('Class');
-    
+
     const dataRows = (hasHeader ? rows.slice(1) : rows)
       .map(row => row.split('\t'));
 
@@ -141,9 +141,9 @@ function App() {
     const example3 = "4A,Brown,Charlie,Male,Low,Needs Support,,";
     const example4 = "5A,Test,Alice,Female,3,High,,";
     const example5 = ",Note:,Academic/Behaviour scale can be High/Average/Low, 3/2/1, or Good/Needs Support etc.,,,,";
-    const csvContent = "data:text/csv;charset=utf-8," + 
+    const csvContent = "data:text/csv;charset=utf-8," +
       [headers, example1, example2, example3, example4, example5].join("\n");
-      
+
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -161,11 +161,15 @@ function App() {
     const subHeaderRow = [];
     const colWidths = [];
 
+    // Define styles for Excel export
+    const greenStyle = { font: { color: { rgb: "008000" }, bold: true } }; // Green
+    const redStyle = { font: { color: { rgb: "FF0000" }, bold: true } }; // Red
+
     // Flatten all generated classes from all groups into one list
     const allclasses = [];
     const groupNames = Object.keys(generatedClasses);
     let maxLen = 0; // Find max class length across all classes
-    
+
     groupNames.forEach(groupName => {
       generatedClasses[groupName].forEach((cls, index) => {
         // Add the group name and index to each class object
@@ -182,36 +186,36 @@ function App() {
       console.error("No data to export because no classes were generated.");
       return;
     }
-    
+
     // 1. Create Headers
     let colIndex = 0;
     allclasses.forEach((cls) => {
       const classTitle = `${cls.groupName} - Class ${cls.classIndex} (${cls.students.length} students)`;
 
       headerRow[colIndex] = classTitle;
-      
+
       subHeaderRow[colIndex] = 'Student Name';
-      subHeaderRow[colIndex+1] = 'Old Class';
-      subHeaderRow[colIndex+2] = 'Academic';
-      subHeaderRow[colIndex+3] = 'Behaviour';
-      
+      subHeaderRow[colIndex + 1] = 'Old Class';
+      subHeaderRow[colIndex + 2] = 'Academic';
+      subHeaderRow[colIndex + 3] = 'Behaviour';
+
       // Set col widths
-      colWidths.push({wch: 30}, {wch: 10}, {wch: 10}, {wch: 10});
+      colWidths.push({ wch: 30 }, { wch: 10 }, { wch: 10 }, { wch: 10 });
 
       // Add spacer column
-      colWidths.push({wch: 5}); // Spacer col width
+      colWidths.push({ wch: 5 }); // Spacer col width
       colIndex += 5; // 4 for data + 1 for spacer
     });
-    
+
     wsData.push(headerRow);
     wsData.push(subHeaderRow);
 
     // Pre-sort all student lists ONCE
     const sortedAllClasses = allclasses.map(cls => ({
       ...cls,
-      students: cls.students.sort((a,b) => a.surname.localeCompare(b.surname))
+      students: cls.students.sort((a, b) => a.surname.localeCompare(b.surname))
     }));
-    
+
     // 2. Create Data Rows
     for (let i = 0; i < maxLen; i++) { // Row loop (student index)
       const row = [];
@@ -221,20 +225,20 @@ function App() {
         const student = cls.students[i];
         if (student) {
           row[colIndex] = student.fullName;
-          row[colIndex+1] = student.existingClass;
-          row[colIndex+2] = student.academic;
-          row[colIndex+3] = student.behaviour;
+          row[colIndex + 1] = student.existingClass;
+          row[colIndex + 2] = student.academic;
+          row[colIndex + 3] = student.behaviour;
         }
         // Spacer is implicitly null
         colIndex += 5;
       }
       wsData.push(row);
     }
-    
+
     // 3. Add Stats Rows
     wsData.push([]); // Spacer row
     const statsStartRow = wsData.length; // This is the row index where stats titles will start
-    
+
     const balanceTitleRow = [];
     const genderRow = [];
     const academicRow = [];
@@ -243,31 +247,31 @@ function App() {
     colIndex = 0;
     allclasses.forEach((cls) => {
       balanceTitleRow[colIndex] = "--- Class Balance ---";
-      
+
       genderRow[colIndex] = "Gender:";
-      genderRow[colIndex+1] = Object.entries(cls.stats.gender).map(([k, v]) => `${k}: ${v}`).join(', ');
-      
+      genderRow[colIndex + 1] = Object.entries(cls.stats.gender).map(([k, v]) => `${k}: ${v}`).join(', ');
+
       // Use ordered stats
       academicRow[colIndex] = "Academic:";
-      academicRow[colIndex+1] = academicOrder
+      academicRow[colIndex + 1] = academicOrder
         .map(level => (cls.stats.academic[level] > 0 ? `${level}: ${cls.stats.academic[level]}` : null))
         .filter(Boolean) // Remove nulls
         .join(', ');
-      
+
       behaviourRow[colIndex] = "Behaviour:";
-      behaviourRow[colIndex+1] = behaviourOrder
+      behaviourRow[colIndex + 1] = behaviourOrder
         .map(level => (cls.stats.behaviour[level] > 0 ? `${level}: ${cls.stats.behaviour[level]}` : null))
         .filter(Boolean) // Remove nulls
         .join(', ');
-      
+
       colIndex += 5; // Move to the start of the next class block (4 cols + 1 spacer)
     });
-    
+
     wsData.push(balanceTitleRow, genderRow, academicRow, behaviourRow); // Removed existingRow
 
     // 4. Create worksheet
     const ws = XLSX.utils.aoa_to_sheet(wsData);
-    
+
     // 5. Add Merges
     ws['!merges'] = [];
     colIndex = 0;
@@ -279,39 +283,40 @@ function App() {
       });
       // Stats Title merge
       ws['!merges'].push({
-        s: { c: colIndex, r: statsStartRow }, 
+        s: { c: colIndex, r: statsStartRow },
         e: { c: colIndex + 3, r: statsStartRow }
       });
       // Stats Data merges
-      ws['!merges'].push({ s: { c: colIndex+1, r: statsStartRow+1 }, e: { c: colIndex + 3, r: statsStartRow+1 } }); // Gender
-      ws['!merges'].push({ s: { c: colIndex+1, r: statsStartRow+2 }, e: { c: colIndex + 3, r: statsStartRow+2 } }); // Academic
-      ws['!merges'].push({ s: { c: colIndex+1, r: statsStartRow+3 }, e: { c: colIndex + 3, r: statsStartRow+3 } }); // Behaviour
-      
+      ws['!merges'].push({ s: { c: colIndex + 1, r: statsStartRow + 1 }, e: { c: colIndex + 3, r: statsStartRow + 1 } }); // Gender
+      ws['!merges'].push({ s: { c: colIndex + 1, r: statsStartRow + 2 }, e: { c: colIndex + 3, r: statsStartRow + 2 } }); // Academic
+      ws['!merges'].push({ s: { c: colIndex + 1, r: statsStartRow + 3 }, e: { c: colIndex + 3, r: statsStartRow + 3 } }); // Behaviour
+
       colIndex += 5; // 4 for class, 1 for spacer
     }
-    
-    // 6. Add Styling (Highlights)
-    const boldStyle = { font: { bold: true } }; // Use bold style
 
+    // 6. Add Styling (Highlights)
     for (let r = 2; r < maxLen + 2; r++) { // Start from data row (index 2)
       colIndex = 0;
       for (let c = 0; c < sortedAllClasses.length; c++) {
         // Get the student for this row
-        const student = sortedAllClasses[c].students[r-2];
-        
+        const student = sortedAllClasses[c].students[r - 2];
+
         if (student) {
           const studentName = student.fullName;
           const classStudents = sortedAllClasses[c].students;
-          
+
           // Call the top-level function
           const highlight = getFriendSeparationHighlight(studentName, classStudents);
-          
+
           // Apply style to cell
-          if (highlight === 'font-bold') { // Check for 'font-bold'
-            const studentCellRef = XLSX.utils.encode_cell({ r: r, c: colIndex });
-            const studentCell = ws[studentCellRef];
-            if (studentCell) {
-              studentCell.s = boldStyle; // Apply bold style
+          const studentCellRef = XLSX.utils.encode_cell({ r: r, c: colIndex });
+          const studentCell = ws[studentCellRef];
+
+          if (studentCell) {
+            if (highlight.includes('text-green-600')) {
+              studentCell.s = greenStyle; // Apply green style
+            } else if (highlight.includes('text-red-600')) {
+              studentCell.s = redStyle; // Apply red style
             }
           }
         }
@@ -321,10 +326,10 @@ function App() {
 
     // 7. Set Column Widths
     ws['!cols'] = colWidths;
-    
+
     // 8. Add worksheet to workbook (only one sheet)
     XLSX.utils.book_append_sheet(wb, ws, "Generated Classes");
-    
+
     // 9. Write and download
     XLSX.writeFile(wb, "generated_classes.xlsx");
   };
@@ -391,11 +396,11 @@ function App() {
       // Find students *in this pool*
       const s1Index = availableStudents.findIndex(s => s.fullName === name1 && !placedStudentIds.includes(s.id));
       const s2Index = availableStudents.findIndex(s => s.fullName === name2 && !placedStudentIds.includes(s.id));
-      
+
       if (s1Index > -1 && s2Index > -1) {
         const s1 = availableStudents[s1Index];
         const s2 = availableStudents[s2Index];
-        
+
         newClasses.sort((a, b) => a.students.length - b.students.length);
         const bestClass = newClasses[0];
 
@@ -407,14 +412,14 @@ function App() {
         }
       }
     });
-    
+
     let remainingStudents = availableStudents
       .filter(s => !placedStudentIds.includes(s.id));
-      
+
     // Shuffle remainingStudents *outside* a loop
     for (let i = remainingStudents.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [remainingStudents[i], remainingStudents[j]] = [remainingStudents[j], remainingStudents[i]];
+      const j = Math.floor(Math.random() * (i + 1));
+      [remainingStudents[i], remainingStudents[j]] = [remainingStudents[j], remainingStudents[i]];
     }
 
     // 3. Distribute all remaining students based on lowest cost
@@ -425,8 +430,8 @@ function App() {
       // Shuffle classes for tie-breaking
       const shuffledClasses = [...newClasses]; // Create a copy
       for (let i = shuffledClasses.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [shuffledClasses[i], shuffledClasses[j]] = [shuffledClasses[j], shuffledClasses[i]];
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledClasses[i], shuffledClasses[j]] = [shuffledClasses[j], shuffledClasses[i]];
       }
 
       for (const cls of shuffledClasses) {
@@ -448,7 +453,7 @@ function App() {
           updateClassStats(fallbackClass, student);
           placedStudentIds.push(student.id);
         } else {
-           console.error(`!!! FAILED TO PLACE ${student.fullName}. All classes are full.`);
+          console.error(`!!! FAILED TO PLACE ${student.fullName}. All classes are full.`);
         }
       }
     }
@@ -497,11 +502,11 @@ function App() {
     yearLevels.forEach((year, index) => {
       const studentCount = straightYearCounts[year];
       if (studentCount === 0) return; // No students for this year
-      
+
       // Pro-rata calculation
       let numClassesForThisYear;
       if (numStraightClasses <= 0) {
-         numClassesForThisYear = 0;
+        numClassesForThisYear = 0;
       } else if (index === yearLevels.length - 1) {
         // Last year level gets the remaining classes
         numClassesForThisYear = numStraightClasses - straightClassesCreated;
@@ -511,10 +516,10 @@ function App() {
         straightClassesCreated += numClassesForThisYear;
       }
 
-      if(numClassesForThisYear < 0) numClassesForThisYear = 0;
+      if (numClassesForThisYear < 0) numClassesForThisYear = 0;
 
       const [newClasses, placedIds] = runBalancing(
-        straightYearPools[year], 
+        straightYearPools[year],
         numClassesForThisYear
       );
 
@@ -527,7 +532,7 @@ function App() {
 
     // 5. Generate COMPOSITE classes from the leftovers
     const compositePool = allGroupStudents.filter(s => !allPlacedStudentIds.has(s.id));
-    
+
     const [compositeClasses, placedIds] = runBalancing(
       compositePool,
       numCompositeClasses
@@ -539,7 +544,7 @@ function App() {
       const groupName = `Composite ${nextYears}`;
       finalClasses[groupName] = compositeClasses;
     }
-    
+
     // Add these IDs to the set (even though it's the last step, it's good practice)
     placedIds.forEach(id => allPlacedStudentIds.add(id));
 
@@ -558,28 +563,38 @@ function App() {
     cls.stats.behaviour[behaviour] = (cls.stats.behaviour[behaviour] || 0) + 1;
     cls.stats.existingClass[existingClass] = (cls.stats.existingClass[existingClass] || 0) + 1;
   };
-  
+
+  /**
+   * --- THIS IS THE FIX ---
+   * This function now returns specific Tailwind classes for highlighting.
+   * 'text-green-600 font-bold' for successful pairs.
+   * 'text-red-600 font-bold' for violated separations.
+   */
   const getFriendSeparationHighlight = (studentName, classStudents) => {
-    let highlight = '';
-    
-    // Check for friend pairings
-    friendRequests.forEach(req => {
-      if (req.students.includes(studentName) && classStudents.some(s => req.students.includes(s.fullName) && s.fullName !== studentName)) {
-        highlight = 'font-bold';
+    // Check for VIOLATED separation (RED)
+    // Find the student object to pass to violatesSeparation
+    const student = classStudents.find(s => s.fullName === studentName);
+    if (student && violatesSeparation(student, classStudents)) {
+      return 'text-red-600 font-bold'; // Violated separation
+    }
+
+    // Check for SUCCESSFUL pairing (GREEN)
+    for (const req of friendRequests) {
+      const [s1, s2] = req.students;
+      // Is this student part of the request?
+      if (studentName === s1 || studentName === s2) {
+        // Is the *other* person also in the class?
+        const partnerName = (studentName === s1) ? s2 : s1;
+        if (classStudents.some(s => s.fullName === partnerName)) {
+          return 'text-green-600 font-bold'; // Successful pairing
+        }
       }
-    });
-    
-    // Check for separation requests
-    separationRequests.forEach(req => {
-      if (req.students.includes(studentName)) {
-        highlight = 'font-bold';
-      }
-    });
-    return highlight;
+    }
+
+    return ''; // No highlight
   };
 
   return (
-    // *** THIS IS THE FIX: Added the opening <div> tag ***
     <div className="container mx-auto p-4 font-sans">
       <div className="text-center">
         <h1 className="text-3xl font-bold mb-2 text-gray-800">Class Builder App</h1>
@@ -587,13 +602,13 @@ function App() {
       </div>
 
       <div className="mb-6 max-w-lg mx-auto">
-          <button
-            onClick={downloadTemplate}
-            className="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-          >
-            Download CSV Template
-          </button>
-        </div>
+        <button
+          onClick={downloadTemplate}
+          className="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+        >
+          Download CSV Template
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         {/* Student Input */}
@@ -604,7 +619,7 @@ function App() {
           <textarea
             id="studentNames"
             className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mb-4 h-32"
-            placeholder="Class    Surname    First Name    Gender    Academic    Behaviour Needs    Request: Pair    Request: Separate&#10;7A    Smith    Jane    Female    High    Good    John D    Tom Lee&#10;7B    Doe    John    Male    2    2    Jane Smith    "
+            placeholder="Class&#x9;Surname&#x9;First Name&#x9;Gender&#x9;Academic&#x9;Behaviour Needs&#x9;Request: Pair&#x9;Request: Separate&#10;7A&#x9;Smith&#x9;Jane&#x9;Female&#x9;High&#x9;Good&#x9;John D&#x9;Tom Lee&#10;7B&#x9;Doe&#x9;John&#x9;Male&#x9;2&#x9;2&#x9;Jane Smith&#x9;"
             onChange={handleStudentNamesInput}
           ></textarea>
           <p className="text-gray-600 text-xs mb-4">
@@ -619,7 +634,7 @@ function App() {
         {/* Class Parameters */}
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold mb-4 text-gray-700">Class Parameters</h2>
-          
+
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2">
               Current Year Levels (e.g., 7 or 4, 5)
@@ -631,7 +646,7 @@ function App() {
               className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
               placeholder="e.g., 7 or 4, 5"
             />
-             <p className="text-gray-600 text-xs mt-2">
+            <p className="text-gray-600 text-xs mt-2">
               List the **current** year levels to pull students from (e.g., "4, 5" to make a 5/6 group).
             </p>
           </div>
@@ -660,11 +675,11 @@ function App() {
               className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
               min="0"
             />
-             <p className="text-gray-600 text-xs mt-2">
+            <p className="text-gray-600 text-xs mt-2">
               Example: 6 Total, 1 Composite = 5 Straight Classes + 1 Composite Class.
             </p>
           </div>
-          
+
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2">
               Class Size Range (for all classes):
@@ -710,7 +725,7 @@ function App() {
               Export to .xlsx
             </button>
           </div>
-          
+
           {Object.keys(generatedClasses).map(groupName => (
             <div key={groupName} className="mb-8">
               <h3 className="text-xl font-bold mb-4 text-gray-800">{groupName}</h3>
@@ -724,11 +739,11 @@ function App() {
                           <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student Name</th>
                           <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Old Class</th>
                           <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Academic</th>
-                          <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Behaviour</th>
+                          <th scope="col" className="px-3 py-2 text-left text-xs font-to-medium text-gray-500 uppercase tracking-wider">Behaviour</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {cls.students.sort((a,b) => a.surname.localeCompare(b.surname)).map(student => (
+                        {cls.students.sort((a, b) => a.surname.localeCompare(b.surname)).map(student => (
                           <tr key={student.id}>
                             <td className={`px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900 ${getFriendSeparationHighlight(student.fullName, cls.students)}`}>{student.fullName}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.existingClass}</td>
@@ -770,7 +785,7 @@ function App() {
                         </div>
                         <div>
                           <p className="font-medium">Previous Class:</p>
-                          {Object.entries(cls.stats.existingClass).sort((a, b) => a[0].localeCompare(b[0], undefined, {numeric: true})).map(([className, count]) => (
+                          {Object.entries(cls.stats.existingClass).sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true })).map(([className, count]) => (
                             <p key={className} className={`px-2 py-1 rounded-md`}>
                               {className}: {count}
                             </p>
