@@ -618,14 +618,13 @@ function App() {
   };
 
   return (
+    // *** FIX: WRAP EVERYTHING IN A SINGLE DIV ***
     <div className="container mx-auto p-4 font-sans">
-      {/* FIX: Center title and add subtitle */}
       <div className="text-center">
         <h1 className="text-3xl font-bold mb-2 text-gray-800">Class Builder App</h1>
         <p className="text-xl text-gray-600 mb-8">Making building classes as easy as 1,2...3</p>
       </div>
 
-      {/* FIX: Move template button up */}
       <div className="mb-6 max-w-lg mx-auto">
           <button
             onClick={downloadTemplate}
@@ -638,7 +637,6 @@ function App() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         {/* Student Input */}
         <div className="bg-white p-6 rounded-lg shadow-md">
-          {/* FIX: Update label */}
           <label htmlFor="studentNames" className="block text-gray-700 text-sm font-bold mb-2">
             Paste Tab-Separated Data (including header) directly from the Template:
           </label>
@@ -652,7 +650,6 @@ function App() {
             Columns: **Class, Surname, First Name, Gender, Academic, Behaviour Needs, Request: Pair, Request: Separate**
           </p>
 
-          {/* FIX: Remove file upload input */}
           <p className="text-gray-600 text-xs mt-2 mb-4">
             Academic/Behaviour columns can use: `High/Medium/Low`, `3/2/1`, or `Good/Needs Support` etc.
           </p>
@@ -662,7 +659,6 @@ function App() {
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold mb-4 text-gray-700">Class Parameters</h2>
           
-          {/* NEW Simplified Class Group Inputs */}
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2">
               Current Year Levels (e.g., 7 or 4, 5)
@@ -708,7 +704,6 @@ function App() {
             </p>
           </div>
           
-          {/* Class Size Range */}
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2">
               Class Size Range (for all classes):
@@ -788,7 +783,6 @@ function App() {
                                       {...provided.dragHandleProps} 
                                       key={student.id} 
                                     >
-                                      {/* FIX: Apply font-bold class here */}
                                       <td className={`px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900 ${getFriendSeparationHighlight(student.fullName, cls.students)}`}>{student.fullName}</td>
                                       <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.existingClass}</td>
                                       <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.academic}</td>
@@ -816,7 +810,6 @@ function App() {
                           </div>
                           <div>
                             <p className="font-medium">Academic:</p>
-                            {/* FIX: Use ordered array */}
                             {academicOrder.map(level => (
                               (cls.stats.academic[level] > 0) &&
                               <p key={level} className={`px-2 py-1 rounded-md`}>
@@ -826,7 +819,6 @@ function App() {
                           </div>
                           <div>
                             <p className="font-medium">Behaviour:</p>
-                            {/* FIX: Use ordered array */}
                             {behaviourOrder.map(level => (
                               (cls.stats.behaviour[level] > 0) &&
                               <p key={level} className={`px-2 py-1 rounded-md`}>
@@ -836,7 +828,6 @@ function App() {
                           </div>
                           <div>
                             <p className="font-medium">Previous Class:</p>
-                            {/* FIX: Use sorted array */}
                             {Object.entries(cls.stats.existingClass).sort((a, b) => a[0].localeCompare(b[0], undefined, {numeric: true})).map(([className, count]) => (
                               <p key={className} className={`px-2 py-1 rounded-md`}>
                                 {className}: {count}
@@ -852,9 +843,9 @@ function App() {
             </div>
           ))}
         </div>
+      )}
       </DragDropContext>
 
-      {/* FIX: Add donation text at the bottom */}
       <div className="text-center text-gray-600 mt-12 p-4 border-t">
         <p className="font-semibold">Other apps charge thousands of dollars for this functionality.</p>
         <p className="mb-2">We're sure this saved you a lot of precious time and we just ask for a fair donation.</p>
