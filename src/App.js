@@ -618,8 +618,8 @@ function App() {
   };
 
   return (
-    // *** THIS IS THE FIX: Added the opening wrapper tag ***
-    <>
+    // *** THIS IS THE FIX: Added the opening React Fragment tag ***
+<**<>**
       <div className="container mx-auto p-4 font-sans">
         <div className="text-center">
           <h1 className="text-3xl font-bold mb-2 text-gray-800">Class Builder App</h1>
@@ -856,7 +856,7 @@ function App() {
         </div>
       </div>
     {/* *** THIS IS THE FIX: Added the closing fragment tag *** */}
-    </>
+<**/>**
   );
 }
 
