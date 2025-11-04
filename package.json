@@ -2,13 +2,14 @@
   "name": "class-builder-app",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://PeterBuul.github.io/class-builder-app",
+  "homepage": "https://[YOUR_GITHUB_USERNAME].github.io/[YOUR_REPOSITORY_NAME]",
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
     "web-vitals": "^2.1.4",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "react-beautiful-dnd": "^13.1.1"
   },
   "scripts": {
     "start": "react-scripts start",
