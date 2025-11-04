@@ -265,7 +265,7 @@ function App() {
       genderRow[colIndex] = "Gender:";
       genderRow[colIndex+1] = Object.entries(cls.stats.gender).map(([k, v]) => `${k}: ${v}`).join(', ');
       
-      // FIX: Use ordered stats
+      // Use ordered stats
       academicRow[colIndex] = "Academic:";
       academicRow[colIndex+1] = academicOrder
         .map(level => (cls.stats.academic[level] > 0 ? `${level}: ${cls.stats.academic[level]}` : null))
@@ -309,9 +309,7 @@ function App() {
     }
     
     // 6. Add Styling (Highlights)
-    const greenFill = { fill: { fgColor: { rgb: "FFC7EFCF" } } };
-    const redFill = { fill: { fgColor: { rgb: "FFFFC7CE" } } }; // Light Red
-    const darkRedFill = { fill: { fgColor: { rgb: "FFFF8F8F" } } }; // Darker Red for violations
+    const boldStyle = { font: { bold: true } };
 
     for (let r = 2; r < maxLen + 2; r++) { // Start from data row (index 2)
       colIndex = 0;
@@ -327,16 +325,11 @@ function App() {
           const highlight = getFriendSeparationHighlight(studentName, classStudents);
           
           // Apply style to cell
-          if (highlight === 'bg-green-200' || highlight === 'bg-red-200' || highlight === 'bg-red-500') {
-            const style = (highlight === 'bg-green-200') ? greenFill : (highlight === 'bg-red-500' ? darkRedFill : redFill);
-            
-            // Style all 4 cells
-            for (let i = 0; i < 4; i++) {
-              const cellRef = XLSX.utils.encode_cell({ r: r, c: colIndex + i });
-              const cell = ws[cellRef];
-              if (cell) {
-                cell.s = style;
-              }
+          if (highlight === 'font-bold') { // Check for the 'font-bold' class
+            const studentCellRef = XLSX.utils.encode_cell({ r: r, c: colIndex });
+            const studentCell = ws[studentCellRef];
+            if (studentCell) {
+              studentCell.s = boldStyle; // Apply bold style
             }
           }
         }
@@ -588,24 +581,20 @@ function App() {
   };
 
   const getFriendSeparationHighlight = (studentName, classStudents) => {
+    // FIX: Change logic to return 'font-bold'
     let highlight = '';
-    // Check for friend pairings (Green)
+    
+    // Check for friend pairings
     friendRequests.forEach(req => {
       if (req.students.includes(studentName) && classStudents.some(s => req.students.includes(s.fullName) && s.fullName !== studentName)) {
-        highlight = 'bg-green-200'; // Friend pair
+        highlight = 'font-bold';
       }
     });
     
-    // Separation requests override green
+    // Check for separation requests
     separationRequests.forEach(req => {
       if (req.students.includes(studentName)) {
-        // Check for a VIOLATION (darker red)
-        if (classStudents.some(s => req.students.includes(s.fullName) && s.fullName !== studentName)) {
-          highlight = 'bg-red-500'; // VIOLATION - dark red
-        } else {
-          // SUCCESSFUL separation, but highlight them anyway
-          highlight = 'bg-red-200'; // SEPARATION REQUESTED - light red
-        }
+        highlight = 'font-bold';
       }
     });
     return highlight;
@@ -613,14 +602,28 @@ function App() {
 
   return (
     <div className="container mx-auto p-4 font-sans">
-      <h1 className="text-3xl font-bold mb-6 text-gray-800">Class Builder App</h1>
+      {/* FIX: Center title and add subtitle */}
+      <div className="text-center">
+        <h1 className="text-3xl font-bold mb-2 text-gray-800">Class Builder App</h1>
+        <p className="text-xl text-gray-600 mb-8">Making building classes as easy as 1,2...3</p>
+      </div>
+
+      {/* FIX: Move template button up */}
+      <div className="mb-6 max-w-lg mx-auto">
+          <button
+            onClick={downloadTemplate}
+            className="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+          >
+            Download CSV Template
+          </button>
+        </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         {/* Student Input */}
         <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold mb-4 text-gray-700">Student Input</h2>
+          {/* FIX: Update label */}
           <label htmlFor="studentNames" className="block text-gray-700 text-sm font-bold mb-2">
-            Paste Tab-Separated Data (including header):
+            Paste Tab-Separated Data (including header) directly from the Template:
           </label>
           <textarea
             id="studentNames"
@@ -632,25 +635,10 @@ function App() {
             Columns: **Class, Surname, First Name, Gender, Academic, Behaviour, Request: Pair, Request: Separate**
           </p>
 
-          <label htmlFor="fileUpload" className="block text-gray-700 text-sm font-bold mb-2">
-            Or Upload Spreadsheet (.xlsx, .csv):
-          </label>
-          <input
-            type="file"
-            id="fileUpload"
-            accept=".xlsx, .xls, .csv"
-            onChange={handleFileUpload}
-            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-          />
+          {/* FIX: Remove file upload input */}
           <p className="text-gray-600 text-xs mt-2 mb-4">
-            Request columns can use partial names (e.g., "John D").
+            Academic/Behaviour columns can use: `High/Medium/Low`, `3/2/1`, or `Good/Needs Support` etc.
           </p>
-          <button
-            onClick={downloadTemplate}
-            className="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-          >
-            Download CSV Template
-          </button>
         </div>
 
         {/* Class Parameters */}
@@ -768,8 +756,9 @@ function App() {
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {cls.students.sort((a,b) => a.surname.localeCompare(b.surname)).map(student => (
-                          <tr key={student.id} className={getFriendSeparationHighlight(student.fullName, cls.students)}>
-                            <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{student.fullName}</td>
+                          <tr key={student.id}>
+                            {/* FIX: Apply font-bold class here */}
+                            <td className={`px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900 ${getFriendSeparationHighlight(student.fullName, cls.students)}`}>{student.fullName}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.existingClass}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.academic}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.behaviour}</td>
