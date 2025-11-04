@@ -129,22 +129,7 @@ function App() {
     setStudents(parseStudentData(dataObjects));
   };
 
-  // Handle file upload
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const data = new Uint8Array(event.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json(worksheet);
-        setStudents(parseStudentData(json));
-      };
-      reader.readAsArrayBuffer(file);
-    }
-  };
+  // *** FIX: REMOVED UNUSED handleFileUpload FUNCTION ***
 
   const handleClassSizeChange = (field, value) => {
     setClassSizeRange(prev => ({ ...prev, [field]: parseInt(value, 10) || 0 }));
@@ -152,7 +137,7 @@ function App() {
 
   // Function to download a CSV template
   const downloadTemplate = () => {
-    // FIX: Add more examples to template
+    // Add more examples to template
     const headers = "Class,Surname,First Name,Gender,Academic,Behaviour,Request: Pair,Request: Separate";
     const example1 = "4A,Smith,Jane,Female,High,Good,John Doe,Tom Lee";
     const example2 = "4B,Doe,John,Male,2,2,Jane S,";
@@ -309,7 +294,7 @@ function App() {
     }
     
     // 6. Add Styling (Highlights)
-    const boldStyle = { font: { bold: true } };
+    const boldStyle = { font: { bold: true } }; // Use bold style
 
     for (let r = 2; r < maxLen + 2; r++) { // Start from data row (index 2)
       colIndex = 0;
@@ -325,7 +310,7 @@ function App() {
           const highlight = getFriendSeparationHighlight(studentName, classStudents);
           
           // Apply style to cell
-          if (highlight === 'font-bold') { // Check for the 'font-bold' class
+          if (highlight === 'font-bold') { // Check for 'font-bold'
             const studentCellRef = XLSX.utils.encode_cell({ r: r, c: colIndex });
             const studentCell = ws[studentCellRef];
             if (studentCell) {
