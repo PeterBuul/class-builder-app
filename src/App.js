@@ -96,7 +96,7 @@ function App() {
         existingClass: row.Class || 'Unknown',
         gender: row.Gender || 'Unknown',
         academic: normalizeRanking(row.Academic || 'Average'),
-        behaviour: normalizeRanking(row.Behaviour || 'Good'),
+        behaviour: normalizeRanking(row['Behaviour Needs'] || 'Good'),
         requestPair: row['Request: Pair'] || '',
         requestSeparate: row['Request: Separate'] || '',
       };
@@ -121,7 +121,7 @@ function App() {
       'First Name': row[2],
       'Gender': row[3],
       'Academic': row[4],
-      'Behaviour': row[5],
+      'Behaviour Needs': row[5],
       'Request: Pair': row[6],
       'Request: Separate': row[7],
     }));
@@ -135,8 +135,7 @@ function App() {
 
   // Function to download a CSV template
   const downloadTemplate = () => {
-    // Add more examples to template
-    const headers = "Class,Surname,First Name,Gender,Academic,Behaviour,Request: Pair,Request: Separate";
+    const headers = "Class,Surname,First Name,Gender,Academic,Behaviour Needs,Request: Pair,Request: Separate";
     const example1 = "4A,Smith,Jane,Female,High,Good,John Doe,Tom Lee";
     const example2 = "4B,Doe,John,Male,2,2,Jane S,";
     const example3 = "4A,Brown,Charlie,Male,Low,Needs Support,,";
@@ -292,7 +291,9 @@ function App() {
     }
     
     // 6. Add Styling (Highlights)
-    const boldStyle = { font: { bold: true } }; // Use bold style
+    const greenFill = { fill: { fgColor: { rgb: "FFC7EFCF" } } };
+    const redFill = { fill: { fgColor: { rgb: "FFFFC7CE" } } }; // Light Red
+    const darkRedFill = { fill: { fgColor: { rgb: "FFFF8F8F" } } }; // Darker Red for violations
 
     for (let r = 2; r < maxLen + 2; r++) { // Start from data row (index 2)
       colIndex = 0;
@@ -308,11 +309,14 @@ function App() {
           const highlight = getFriendSeparationHighlight(studentName, classStudents);
           
           // Apply style to cell
-          if (highlight === 'font-bold') { // Check for 'font-bold'
-            const studentCellRef = XLSX.utils.encode_cell({ r: r, c: colIndex });
-            const studentCell = ws[studentCellRef];
-            if (studentCell) {
-              studentCell.s = boldStyle; // Apply bold style
+          if (highlight === 'bg-green-200' || highlight === 'bg-red-200' || highlight === 'bg-red-500') {
+            const style = (highlight === 'bg-green-200') ? greenFill : (highlight === 'bg-red-500' ? darkRedFill : redFill);
+            
+            // Style all 4 cells
+            for (let i = 0; i < 4; i++) {
+              const cellRef = XLSX.utils.encode_cell({ r: r, c: colIndex + i });
+              if (!ws[cellRef]) ws[cellRef] = { v: wsData[r][colIndex + i] }; // Ensure cell object exists
+              ws[cellRef].s = style;
             }
           }
         }
@@ -340,7 +344,7 @@ function App() {
     return false;
   };
 
-  // --- Balancing functions moved to top level to prevent build error ---
+  // --- FIX: Moved balancing functions to top level to prevent build error ---
 
   const costForStat = (value, category, cls, groupTotals, numClassesToMake) => {
     const totalCount = groupTotals[category][value] || 0;
@@ -563,40 +567,6 @@ function App() {
     cls.stats.existingClass[existingClass] = (cls.stats.existingClass[existingClass] || 0) + 1;
   };
 
-  // NEW: Recalculates all stats for a class after a DND drop
-  const recalculateStats = (cls) => {
-    cls.stats = { gender: {}, academic: {}, behaviour: {}, existingClass: {} };
-    for (const student of cls.students) {
-      updateClassStats(cls, student);
-    }
-  };
-
-  const onDragEnd = (result) => {
-    const { source, destination, draggableId } = result;
-    if (!destination) return;
-    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
-
-    // Find the source and destination classes
-    const [sourceGroupName, sourceClassIndex] = source.droppableId.split('-');
-    const [destGroupName, destClassIndex] = destination.droppableId.split('-');
-
-    const newState = JSON.parse(JSON.stringify(generatedClasses)); // Deep copy
-
-    const sourceClass = newState[sourceGroupName][sourceClassIndex];
-    const destClass = newState[destGroupName][destClassIndex];
-
-    // Find and move the student
-    const studentToMove = sourceClass.students.find(s => String(s.id) === draggableId);
-    sourceClass.students.splice(source.index, 1);
-    destClass.students.splice(destination.index, 0, studentToMove);
-
-    // Recalculate stats for both classes
-    recalculateStats(sourceClass);
-    recalculateStats(destClass);
-
-    setGeneratedClasses(newState);
-  };
-
   const getFriendSeparationHighlight = (studentName, classStudents) => {
     // FIX: Revert to color logic
     let highlight = '';
@@ -650,11 +620,11 @@ function App() {
           <textarea
             id="studentNames"
             className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mb-4 h-32"
-            placeholder="Class    Surname    First Name    Gender    Academic    Behaviour    Request: Pair    Request: Separate&#10;7A    Smith    Jane    Female    High    Good    John D    Tom Lee&#10;7B    Doe    John    Male    2    2    Jane Smith    "
+            placeholder="Class    Surname    First Name    Gender    Academic    Behaviour Needs    Request: Pair    Request: Separate&#10;7A    Smith    Jane    Female    High    Good    John D    Tom Lee&#10;7B    Doe    John    Male    2    2    Jane Smith    "
             onChange={handleStudentNamesInput}
           ></textarea>
           <p className="text-gray-600 text-xs mb-4">
-            Columns: **Class, Surname, First Name, Gender, Academic, Behaviour, Request: Pair, Request: Separate**
+            Columns: **Class, Surname, First Name, Gender, Academic, Behaviour Needs, Request: Pair, Request: Separate**
           </p>
 
           {/* FIX: Remove file upload input */}
@@ -794,7 +764,7 @@ function App() {
                                       key={student.id} 
                                       className={getFriendSeparationHighlight(student.fullName, cls.students)}
                                     >
-                                      <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{student.fullName}</td>
+                                      <td className={`px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900`}>{student.fullName}</td>
                                       <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.existingClass}</td>
                                       <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.academic}</td>
                                       <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.behaviour}</td>
