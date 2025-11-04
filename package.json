@@ -2,7 +2,7 @@
   "name": "class-builder-app",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://[YOUR_GITHUB_USERNAME].github.io/[YOUR_REPOSITORY_NAME]",
+  "homepage": "https://PeterBuul.github.io/class-builder-app",
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
