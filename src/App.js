@@ -618,7 +618,7 @@ function App() {
   };
 
   return (
-    // *** FIX: WRAP EVERYTHING IN A SINGLE DIV ***
+    // *** THIS IS THE FIX: Added the opening <div> tag ***
     <div className="container mx-auto p-4 font-sans">
       <div className="text-center">
         <h1 className="text-3xl font-bold mb-2 text-gray-800">Class Builder App</h1>
@@ -853,6 +853,7 @@ function App() {
         <p className="text-sm font-mono">BSB: 062-948</p>
         <p className="text-sm font-mono">Account: 2402 2276</p>
       </div>
+    {/* *** THIS IS THE FIX: Added the closing </div> tag *** */}
     </div>
   );
 }
