@@ -135,6 +135,7 @@ function App() {
 
   // Function to download a CSV template
   const downloadTemplate = () => {
+    // Add more examples to template
     const headers = "Class,Surname,First Name,Gender,Academic,Behaviour Needs,Request: Pair,Request: Separate";
     const example1 = "4A,Smith,Jane,Female,High,Good,John Doe,Tom Lee";
     const example2 = "4B,Doe,John,Male,2,2,Jane S,";
@@ -291,9 +292,7 @@ function App() {
     }
     
     // 6. Add Styling (Highlights)
-    const greenFill = { fill: { fgColor: { rgb: "FFC7EFCF" } } };
-    const redFill = { fill: { fgColor: { rgb: "FFFFC7CE" } } }; // Light Red
-    const darkRedFill = { fill: { fgColor: { rgb: "FFFF8F8F" } } }; // Darker Red for violations
+    const boldStyle = { font: { bold: true } }; // Use bold style
 
     for (let r = 2; r < maxLen + 2; r++) { // Start from data row (index 2)
       colIndex = 0;
@@ -309,14 +308,11 @@ function App() {
           const highlight = getFriendSeparationHighlight(studentName, classStudents);
           
           // Apply style to cell
-          if (highlight === 'bg-green-200' || highlight === 'bg-red-200' || highlight === 'bg-red-500') {
-            const style = (highlight === 'bg-green-200') ? greenFill : (highlight === 'bg-red-500' ? darkRedFill : redFill);
-            
-            // Style all 4 cells
-            for (let i = 0; i < 4; i++) {
-              const cellRef = XLSX.utils.encode_cell({ r: r, c: colIndex + i });
-              if (!ws[cellRef]) ws[cellRef] = { v: wsData[r][colIndex + i] }; // Ensure cell object exists
-              ws[cellRef].s = style;
+          if (highlight === 'font-bold') { // Check for 'font-bold'
+            const studentCellRef = XLSX.utils.encode_cell({ r: r, c: colIndex });
+            const studentCell = ws[studentCellRef];
+            if (studentCell) {
+              studentCell.s = boldStyle; // Apply bold style
             }
           }
         }
@@ -566,27 +562,56 @@ function App() {
     cls.stats.behaviour[behaviour] = (cls.stats.behaviour[behaviour] || 0) + 1;
     cls.stats.existingClass[existingClass] = (cls.stats.existingClass[existingClass] || 0) + 1;
   };
+  
+  // NEW: Recalculates all stats for a class after a DND drop
+  const recalculateStats = (cls) => {
+    cls.stats = { gender: {}, academic: {}, behaviour: {}, existingClass: {} };
+    for (const student of cls.students) {
+      updateClassStats(cls, student);
+    }
+  };
+
+  const onDragEnd = (result) => {
+    const { source, destination, draggableId } = result;
+    if (!destination) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
+
+    // Find the source and destination classes
+    const [sourceGroupName, sourceClassIndex] = source.droppableId.split('-');
+    const [destGroupName, destClassIndex] = destination.droppableId.split('-');
+
+    const newState = JSON.parse(JSON.stringify(generatedClasses)); // Deep copy
+
+    const sourceClass = newState[sourceGroupName][sourceClassIndex];
+    const destClass = newState[destGroupName][destClassIndex];
+
+    // Find and move the student
+    const studentToMove = sourceClass.students.find(s => String(s.id) === draggableId);
+    sourceClass.students.splice(source.index, 1);
+    destClass.students.splice(destination.index, 0, studentToMove);
+
+    // Recalculate stats for both classes
+    recalculateStats(sourceClass);
+    recalculateStats(destClass);
+
+    setGeneratedClasses(newState);
+  };
 
   const getFriendSeparationHighlight = (studentName, classStudents) => {
-    // FIX: Revert to color logic
+    // FIX: Change logic to return 'font-bold'
     let highlight = '';
-    // Check for friend pairings (Green)
+    
+    // Check for friend pairings
     friendRequests.forEach(req => {
       if (req.students.includes(studentName) && classStudents.some(s => req.students.includes(s.fullName) && s.fullName !== studentName)) {
-        highlight = 'bg-green-200'; // Friend pair
+        highlight = 'font-bold';
       }
     });
     
-    // Separation requests override green
+    // Check for separation requests
     separationRequests.forEach(req => {
       if (req.students.includes(studentName)) {
-        // Check for a VIOLATION (darker red)
-        if (classStudents.some(s => req.students.includes(s.fullName) && s.fullName !== studentName)) {
-          highlight = 'bg-red-500'; // VIOLATION - dark red
-        } else {
-          // SUCCESSFUL separation, but highlight them anyway
-          highlight = 'bg-red-200'; // SEPARATION REQUESTED - light red
-        }
+        highlight = 'font-bold';
       }
     });
     return highlight;
@@ -762,9 +787,9 @@ function App() {
                                       {...provided.draggableProps} 
                                       {...provided.dragHandleProps} 
                                       key={student.id} 
-                                      className={getFriendSeparationHighlight(student.fullName, cls.students)}
                                     >
-                                      <td className={`px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900`}>{student.fullName}</td>
+                                      {/* FIX: Apply font-bold class here */}
+                                      <td className={`px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900 ${getFriendSeparationHighlight(student.fullName, cls.students)}`}>{student.fullName}</td>
                                       <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.existingClass}</td>
                                       <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.academic}</td>
                                       <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.behaviour}</td>
@@ -827,7 +852,6 @@ function App() {
             </div>
           ))}
         </div>
-      )}
       </DragDropContext>
 
       {/* FIX: Add donation text at the bottom */}
