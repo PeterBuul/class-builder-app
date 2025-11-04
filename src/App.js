@@ -253,6 +253,7 @@ function App() {
     const genderRow = [];
     const academicRow = [];
     const behaviourRow = [];
+    // const existingRow = []; // Removed as per request
 
     colIndex = 0;
     allclasses.forEach((cls) => {
@@ -261,21 +262,23 @@ function App() {
       genderRow[colIndex] = "Gender:";
       genderRow[colIndex+1] = Object.entries(cls.stats.gender).map(([k, v]) => `${k}: ${v}`).join(', ');
       
-      // FIX: Use ordered stats
+      // Use ordered stats
       academicRow[colIndex] = "Academic:";
       academicRow[colIndex+1] = academicOrder
-        .map(level => `${level}: ${cls.stats.academic[level] || 0}`)
+        .map(level => (cls.stats.academic[level] > 0 ? `${level}: ${cls.stats.academic[level]}` : null))
+        .filter(Boolean) // Remove nulls
         .join(', ');
       
       behaviourRow[colIndex] = "Behaviour:";
       behaviourRow[colIndex+1] = behaviourOrder
-        .map(level => `${level}: ${cls.stats.behaviour[level] || 0}`)
+        .map(level => (cls.stats.behaviour[level] > 0 ? `${level}: ${cls.stats.behaviour[level]}` : null))
+        .filter(Boolean) // Remove nulls
         .join(', ');
       
       colIndex += 5; // Move to the start of the next class block (4 cols + 1 spacer)
     });
     
-    wsData.push(balanceTitleRow, genderRow, academicRow, behaviourRow);
+    wsData.push(balanceTitleRow, genderRow, academicRow, behaviourRow); // Removed existingRow
 
     // 4. Create worksheet
     const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -322,15 +325,14 @@ function App() {
           
           // Apply style to cell
           if (highlight === 'bg-green-200' || highlight === 'bg-red-200' || highlight === 'bg-red-500') {
-            const studentCellRef = XLSX.utils.encode_cell({ r: r, c: colIndex });
-            const studentCell = ws[studentCellRef];
-            if (studentCell) {
-              if(highlight === 'bg-green-200') {
-                studentCell.s = greenFill;
-              } else if (highlight === 'bg-red-500') {
-                studentCell.s = darkRedFill; // Violation
-              } else {
-                studentCell.s = redFill; // Separation requested
+            const style = (highlight === 'bg-green-200') ? greenFill : (highlight === 'bg-red-500' ? darkRedFill : redFill);
+            
+            // Style all 4 cells
+            for (let i = 0; i < 4; i++) {
+              const cellRef = XLSX.utils.encode_cell({ r: r, c: colIndex + i });
+              const cell = ws[cellRef];
+              if (cell) {
+                cell.s = style;
               }
             }
           }
@@ -806,7 +808,8 @@ function App() {
                         </div>
                         <div>
                           <p className="font-medium">Previous Class:</p>
-                          {Object.entries(cls.stats.existingClass).map(([className, count]) => (
+                          {/* FIX: Use sorted array */}
+                          {Object.entries(cls.stats.existingClass).sort((a, b) => a[0].localeCompare(b[0], undefined, {numeric: true})).map(([className, count]) => (
                             <p key={className} className={`px-2 py-1 rounded-md`}>
                               {className}: {count}
                             </p>
