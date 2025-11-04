@@ -16,7 +16,8 @@ function App() {
 
   // Define stat orders
   const academicOrder = ['High', 'Average', 'Low', 'Unknown'];
-  const behaviourOrder = ['Excellent', 'Good', 'Needs Support', 'Unknown'];
+  // FIX: Use the correct order that matches the normalizer
+  const behaviourOrder = ['High', 'Average', 'Low', 'Needs Support', 'Excellent', 'Good', 'Unknown'];
 
   // Auto-parse friend/separation requests from student data
   useEffect(() => {
@@ -151,12 +152,15 @@ function App() {
 
   // Function to download a CSV template
   const downloadTemplate = () => {
+    // FIX: Add more examples to template
     const headers = "Class,Surname,First Name,Gender,Academic,Behaviour,Request: Pair,Request: Separate";
-    const example1 = "7A,Smith,Jane,Female,High,Good,John Doe,Tom Lee";
-    const example2 = "7B,Doe,John,Male,2,2,Jane S,"; // Smart request example
-    const example3 = "7A,Brown,Charlie,Male,Low,Needs Support,,";
+    const example1 = "4A,Smith,Jane,Female,High,Good,John Doe,Tom Lee";
+    const example2 = "4B,Doe,John,Male,2,2,Jane S,";
+    const example3 = "4A,Brown,Charlie,Male,Low,Needs Support,,";
+    const example4 = "5A,Test,Alice,Female,3,High,,";
+    const example5 = ",Note:,Academic/Behaviour scale can be High/Average/Low, 3/2/1, or Good/Needs Support etc.,,,,";
     const csvContent = "data:text/csv;charset=utf-8," + 
-      headers + "\n" + example1 + "\n" + example2 + "\n" + example3;
+      [headers, example1, example2, example3, example4, example5].join("\n");
       
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -253,7 +257,6 @@ function App() {
     const genderRow = [];
     const academicRow = [];
     const behaviourRow = [];
-    // const existingRow = []; // Removed as per request
 
     colIndex = 0;
     allclasses.forEach((cls) => {
@@ -262,7 +265,7 @@ function App() {
       genderRow[colIndex] = "Gender:";
       genderRow[colIndex+1] = Object.entries(cls.stats.gender).map(([k, v]) => `${k}: ${v}`).join(', ');
       
-      // Use ordered stats
+      // FIX: Use ordered stats
       academicRow[colIndex] = "Academic:";
       academicRow[colIndex+1] = academicOrder
         .map(level => (cls.stats.academic[level] > 0 ? `${level}: ${cls.stats.academic[level]}` : null))
