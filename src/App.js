@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 function App() {
   const [students, setStudents] = useState([]);
@@ -291,9 +292,7 @@ function App() {
     }
     
     // 6. Add Styling (Highlights)
-    const greenFill = { fill: { fgColor: { rgb: "FFC7EFCF" } } };
-    const redFill = { fill: { fgColor: { rgb: "FFFFC7CE" } } }; // Light Red
-    const darkRedFill = { fill: { fgColor: { rgb: "FFFF8F8F" } } }; // Darker Red for violations
+    const boldStyle = { font: { bold: true } }; // Use bold style
 
     for (let r = 2; r < maxLen + 2; r++) { // Start from data row (index 2)
       colIndex = 0;
@@ -309,15 +308,11 @@ function App() {
           const highlight = getFriendSeparationHighlight(studentName, classStudents);
           
           // Apply style to cell
-          if (highlight === 'bg-green-200' || highlight === 'bg-red-200' || highlight === 'bg-red-500') {
-            const style = (highlight === 'bg-green-200') ? greenFill : (highlight === 'bg-red-500' ? darkRedFill : redFill);
-            
-            // Style all 4 cells
-            for (let i = 0; i < 4; i++) {
-              const cellRef = XLSX.utils.encode_cell({ r: r, c: colIndex + i });
-              // Ensure cell object exists
-              if (!ws[cellRef]) ws[cellRef] = { v: wsData[r][colIndex + i] };
-              ws[cellRef].s = style;
+          if (highlight === 'font-bold') { // Check for 'font-bold'
+            const studentCellRef = XLSX.utils.encode_cell({ r: r, c: colIndex });
+            const studentCell = ws[studentCellRef];
+            if (studentCell) {
+              studentCell.s = boldStyle; // Apply bold style
             }
           }
         }
@@ -345,7 +340,7 @@ function App() {
     return false;
   };
 
-  // --- FIX: Moved balancing functions to top level to prevent build error ---
+  // --- Balancing functions moved to top level to prevent build error ---
 
   const costForStat = (value, category, cls, groupTotals, numClassesToMake) => {
     const totalCount = groupTotals[category][value] || 0;
@@ -568,7 +563,42 @@ function App() {
     cls.stats.existingClass[existingClass] = (cls.stats.existingClass[existingClass] || 0) + 1;
   };
 
+  // NEW: Recalculates all stats for a class after a DND drop
+  const recalculateStats = (cls) => {
+    cls.stats = { gender: {}, academic: {}, behaviour: {}, existingClass: {} };
+    for (const student of cls.students) {
+      updateClassStats(cls, student);
+    }
+  };
+
+  const onDragEnd = (result) => {
+    const { source, destination, draggableId } = result;
+    if (!destination) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
+
+    // Find the source and destination classes
+    const [sourceGroupName, sourceClassIndex] = source.droppableId.split('-');
+    const [destGroupName, destClassIndex] = destination.droppableId.split('-');
+
+    const newState = JSON.parse(JSON.stringify(generatedClasses)); // Deep copy
+
+    const sourceClass = newState[sourceGroupName][sourceClassIndex];
+    const destClass = newState[destGroupName][destClassIndex];
+
+    // Find and move the student
+    const studentToMove = sourceClass.students.find(s => String(s.id) === draggableId);
+    sourceClass.students.splice(source.index, 1);
+    destClass.students.splice(destination.index, 0, studentToMove);
+
+    // Recalculate stats for both classes
+    recalculateStats(sourceClass);
+    recalculateStats(destClass);
+
+    setGeneratedClasses(newState);
+  };
+
   const getFriendSeparationHighlight = (studentName, classStudents) => {
+    // FIX: Revert to color logic
     let highlight = '';
     // Check for friend pairings (Green)
     friendRequests.forEach(req => {
@@ -718,85 +748,106 @@ function App() {
       </button>
 
       {/* Generated Classes Output */}
-      {Object.keys(generatedClasses).length > 0 && (
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-semibold text-gray-700">Generated Classes</h2>
-            <button
-              onClick={exportToXLSX}
-              className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-            >
-              Export to .xlsx
-            </button>
-          </div>
-          
-          {Object.keys(generatedClasses).map(groupName => (
-            <div key={groupName} className="mb-8">
-              <h3 className="text-xl font-bold mb-4 text-gray-800">{groupName}</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {generatedClasses[groupName].map((cls, index) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4 shadow-sm">
-                    <h4 className="text-lg font-semibold mb-3 text-indigo-700">Class {index + 1} ({cls.students.length} students)</h4>
-                    <table className="min-w-full divide-y divide-gray-200 mb-4">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student Name</th>
-                          <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Old Class</th>
-                          <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Academic</th>
-                          <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Behaviour</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {cls.students.sort((a,b) => a.surname.localeCompare(b.surname)).map(student => (
-                          <tr key={student.id} className={getFriendSeparationHighlight(student.fullName, cls.students)}>
-                            <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{student.fullName}</td>
-                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.existingClass}</td>
-                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.academic}</td>
-                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.behaviour}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+      <DragDropContext onDragEnd={onDragEnd}>
+        {Object.keys(generatedClasses).length > 0 && (
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-semibold text-gray-700">Generated Classes</h2>
+              <button
+                onClick={exportToXLSX}
+                className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+              >
+                Export to .xlsx
+              </button>
+            </div>
 
-                    <div className="text-sm">
-                      <h5 className="font-semibold mt-4 mb-2 text-gray-700">Class Balance:</h5>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <p className="font-medium">Gender:</p>
-                          {Object.entries(cls.stats.gender).map(([gender, count]) => (
-                            <p key={gender} className={`px-2 py-1 rounded-md`}>
-                              {gender}: {count}
-                            </p>
-                          ))}
-                        </div>
-                        <div>
-                          <p className="font-medium">Academic:</p>
-                          {/* FIX: Use ordered array */}
-                          {academicOrder.map(level => (
-                            (cls.stats.academic[level] > 0) &&
-                            <p key={level} className={`px-2 py-1 rounded-md`}>
-                              {level}: {cls.stats.academic[level]}
-                            </p>
-                          ))}
-                        </div>
-                        <div>
-                          <p className="font-medium">Behaviour:</p>
-                          {/* FIX: Use ordered array */}
-                          {behaviourOrder.map(level => (
-                            (cls.stats.behaviour[level] > 0) &&
-                            <p key={level} className={`px-2 py-1 rounded-md`}>
-                              {level}: {cls.stats.behaviour[level]}
-                            </p>
-                          ))}
-                        </div>
-                        <div>
-                          <p className="font-medium">Previous Class:</p>
-                          {/* FIX: Use sorted array */}
-                          {Object.entries(cls.stats.existingClass).sort((a, b) => a[0].localeCompare(b[0], undefined, {numeric: true})).map(([className, count]) => (
-                            <p key={className} className={`px-2 py-1 rounded-md`}>
-                              {className}: {count}
-                            </p>
-                          ))}
+            <p className="text-center text-gray-700 mb-6 font-medium">
+              Feel free to drag and drop if you want a change before you export.
+            </p>
+            
+            {Object.keys(generatedClasses).map(groupName => (
+              <div key={groupName} className="mb-8">
+                <h3 className="text-xl font-bold mb-4 text-gray-800">{groupName}</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {generatedClasses[groupName].map((cls, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4 shadow-sm">
+                      <h4 className="text-lg font-semibold mb-3 text-indigo-700">Class {index + 1} ({cls.students.length} students)</h4>
+                      <table className="min-w-full divide-y divide-gray-200 mb-4">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student Name</th>
+                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Old Class</th>
+                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Academic</th>
+                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Behaviour</th>
+                          </tr>
+                        </thead>
+                        <Droppable droppableId={`${groupName}-${index}`}>
+                          {(provided) => (
+                            <tbody {...provided.droppableProps} ref={provided.innerRef}>
+                              {cls.students.sort((a,b) => a.surname.localeCompare(b.surname)).map((student, studentIndex) => (
+                                <Draggable key={student.id} draggableId={String(student.id)} index={studentIndex}>
+                                  {(provided) => (
+                                    <tr 
+                                      ref={provided.innerRef} 
+                                      {...provided.draggableProps} 
+                                      {...provided.dragHandleProps} 
+                                      key={student.id} 
+                                      className={getFriendSeparationHighlight(student.fullName, cls.students)}
+                                    >
+                                      <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{student.fullName}</td>
+                                      <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.existingClass}</td>
+                                      <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.academic}</td>
+                                      <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.behaviour}</td>
+                                    </tr>
+                                  )}
+                                </Draggable>
+                              ))}
+                              {provided.placeholder}
+                            </tbody>
+                          )}
+                        </Droppable>
+                      </table>
+
+                      <div className="text-sm">
+                        <h5 className="font-semibold mt-4 mb-2 text-gray-700">Class Balance:</h5>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <p className="font-medium">Gender:</p>
+                            {Object.entries(cls.stats.gender).map(([gender, count]) => (
+                              <p key={gender} className={`px-2 py-1 rounded-md`}>
+                                {gender}: {count}
+                              </p>
+                            ))}
+                          </div>
+                          <div>
+                            <p className="font-medium">Academic:</p>
+                            {/* FIX: Use ordered array */}
+                            {academicOrder.map(level => (
+                              (cls.stats.academic[level] > 0) &&
+                              <p key={level} className={`px-2 py-1 rounded-md`}>
+                                {level}: {cls.stats.academic[level]}
+                              </p>
+                            ))}
+                          </div>
+                          <div>
+                            <p className="font-medium">Behaviour:</p>
+                            {/* FIX: Use ordered array */}
+                            {behaviourOrder.map(level => (
+                              (cls.stats.behaviour[level] > 0) &&
+                              <p key={level} className={`px-2 py-1 rounded-md`}>
+                                {level}: {cls.stats.behaviour[level]}
+                              </p>
+                            ))}
+                          </div>
+                          <div>
+                            <p className="font-medium">Previous Class:</p>
+                            {/* FIX: Use sorted array */}
+                            {Object.entries(cls.stats.existingClass).sort((a, b) => a[0].localeCompare(b[0], undefined, {numeric: true})).map(([className, count]) => (
+                              <p key={className} className={`px-2 py-1 rounded-md`}>
+                                {className}: {count}
+                              </p>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -807,6 +858,16 @@ function App() {
           ))}
         </div>
       )}
+      </DragDropContext>
+
+      {/* FIX: Add donation text at the bottom */}
+      <div className="text-center text-gray-600 mt-12 p-4 border-t">
+        <p className="font-semibold">Other apps charge thousands of dollars for this functionality.</p>
+        <p className="mb-2">We're sure this saved you a lot of precious time and we just ask for a fair donation.</p>
+        <p className="text-sm font-mono">Peter Buultjens</p>
+        <p className="text-sm font-mono">BSB: 062-948</p>
+        <p className="text-sm font-mono">Account: 2402 2276</p>
+      </div>
     </div>
   );
 }
