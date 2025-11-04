@@ -618,243 +618,245 @@ function App() {
   };
 
   return (
-    // *** THIS IS THE FIX: Added the opening <div> tag ***
-    <div className="container mx-auto p-4 font-sans">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold mb-2 text-gray-800">Class Builder App</h1>
-        <p className="text-xl text-gray-600 mb-8">Making building classes as easy as 1,2...3</p>
-      </div>
-
-      <div className="mb-6 max-w-lg mx-auto">
-          <button
-            onClick={downloadTemplate}
-            className="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-          >
-            Download CSV Template
-          </button>
+    // *** THIS IS THE FIX: Added the opening wrapper tag ***
+    <>
+      <div className="container mx-auto p-4 font-sans">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold mb-2 text-gray-800">Class Builder App</h1>
+          <p className="text-xl text-gray-600 mb-8">Making building classes as easy as 1,2...3</p>
         </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        {/* Student Input */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <label htmlFor="studentNames" className="block text-gray-700 text-sm font-bold mb-2">
-            Paste Tab-Separated Data (including header) directly from the Template:
-          </label>
-          <textarea
-            id="studentNames"
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mb-4 h-32"
-            placeholder="Class    Surname    First Name    Gender    Academic    Behaviour Needs    Request: Pair    Request: Separate&#10;7A    Smith    Jane    Female    High    Good    John D    Tom Lee&#10;7B    Doe    John    Male    2    2    Jane Smith    "
-            onChange={handleStudentNamesInput}
-          ></textarea>
-          <p className="text-gray-600 text-xs mb-4">
-            Columns: **Class, Surname, First Name, Gender, Academic, Behaviour Needs, Request: Pair, Request: Separate**
-          </p>
-
-          <p className="text-gray-600 text-xs mt-2 mb-4">
-            Academic/Behaviour columns can use: `High/Medium/Low`, `3/2/1`, or `Good/Needs Support` etc.
-          </p>
-        </div>
-
-        {/* Class Parameters */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold mb-4 text-gray-700">Class Parameters</h2>
-          
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2">
-              Current Year Levels (e.g., 7 or 4, 5)
-            </label>
-            <input
-              type="text"
-              value={yearLevelsInput}
-              onChange={(e) => setYearLevelsInput(e.target.value)}
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              placeholder="e.g., 7 or 4, 5"
-            />
-             <p className="text-gray-600 text-xs mt-2">
-              List the **current** year levels to pull students from (e.g., "4, 5" to make a 5/6 group).
-            </p>
+        <div className="mb-6 max-w-lg mx-auto">
+            <button
+              onClick={downloadTemplate}
+              className="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+            >
+              Download CSV Template
+            </button>
           </div>
 
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2">
-              Total Number of Classes
-            </label>
-            <input
-              type="number"
-              value={totalClassesInput}
-              onChange={(e) => setTotalClassesInput(parseInt(e.target.value, 10) || 0)}
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              min="0"
-            />
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2">
-              Number of Composite Classes
-            </label>
-            <input
-              type="number"
-              value={compositeClassesInput}
-              onChange={(e) => setCompositeClassesInput(parseInt(e.target.value, 10) || 0)}
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              min="0"
-            />
-             <p className="text-gray-600 text-xs mt-2">
-              Example: 6 Total, 1 Composite = 5 Straight Classes + 1 Composite Class.
-            </p>
-          </div>
-          
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2">
-              Class Size Range (for all classes):
-            </label>
-            <div className="flex gap-4">
-              <input
-                type="number"
-                value={classSizeRange.min}
-                onChange={(e) => handleClassSizeChange('min', e.target.value)}
-                className="shadow appearance-none border rounded w-1/2 py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                placeholder="Min"
-                min="1"
-              />
-              <input
-                type="number"
-                value={classSizeRange.max}
-                onChange={(e) => handleClassSizeChange('max', e.target.value)}
-                className="shadow appearance-none border rounded w-1/2 py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                placeholder="Max"
-                min="1"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <button
-        onClick={generateClasses}
-        className="bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg focus:outline-none focus:shadow-outline text-xl w-full mb-8"
-      >
-        Generate Classes
-      </button>
-
-      {/* Generated Classes Output */}
-      <DragDropContext onDragEnd={onDragEnd}>
-        {Object.keys(generatedClasses).length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          {/* Student Input */}
           <div className="bg-white p-6 rounded-lg shadow-md">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-semibold text-gray-700">Generated Classes</h2>
-              <button
-                onClick={exportToXLSX}
-                className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-              >
-                Export to .xlsx
-              </button>
+            <label htmlFor="studentNames" className="block text-gray-700 text-sm font-bold mb-2">
+              Paste Tab-Separated Data (including header) directly from the Template:
+            </label>
+            <textarea
+              id="studentNames"
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mb-4 h-32"
+              placeholder="Class    Surname    First Name    Gender    Academic    Behaviour Needs    Request: Pair    Request: Separate&#10;7A    Smith    Jane    Female    High    Good    John D    Tom Lee&#10;7B    Doe    John    Male    2    2    Jane Smith    "
+              onChange={handleStudentNamesInput}
+            ></textarea>
+            <p className="text-gray-600 text-xs mb-4">
+              Columns: **Class, Surname, First Name, Gender, Academic, Behaviour Needs, Request: Pair, Request: Separate**
+            </p>
+
+            <p className="text-gray-600 text-xs mt-2 mb-4">
+              Academic/Behaviour columns can use: `High/Medium/Low`, `3/2/1`, or `Good/Needs Support` etc.
+            </p>
+          </div>
+
+          {/* Class Parameters */}
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <h2 className="text-xl font-semibold mb-4 text-gray-700">Class Parameters</h2>
+            
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2">
+                Current Year Levels (e.g., 7 or 4, 5)
+              </label>
+              <input
+                type="text"
+                value={yearLevelsInput}
+                onChange={(e) => setYearLevelsInput(e.target.value)}
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                placeholder="e.g., 7 or 4, 5"
+              />
+               <p className="text-gray-600 text-xs mt-2">
+                List the **current** year levels to pull students from (e.g., "4, 5" to make a 5/6 group).
+              </p>
             </div>
 
-            <p className="text-center text-gray-700 mb-6 font-medium">
-              Feel free to drag and drop if you want a change before you export.
-            </p>
-            
-            {Object.keys(generatedClasses).map(groupName => (
-              <div key={groupName} className="mb-8">
-                <h3 className="text-xl font-bold mb-4 text-gray-800">{groupName}</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {generatedClasses[groupName].map((cls, index) => (
-                    <div key={index} className="border border-gray-200 rounded-lg p-4 shadow-sm">
-                      <h4 className="text-lg font-semibold mb-3 text-indigo-700">Class {index + 1} ({cls.students.length} students)</h4>
-                      <table className="min-w-full divide-y divide-gray-200 mb-4">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student Name</th>
-                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Old Class</th>
-                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Academic</th>
-                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Behaviour</th>
-                          </tr>
-                        </thead>
-                        <Droppable droppableId={`${groupName}-${index}`}>
-                          {(provided) => (
-                            <tbody {...provided.droppableProps} ref={provided.innerRef}>
-                              {cls.students.sort((a,b) => a.surname.localeCompare(b.surname)).map((student, studentIndex) => (
-                                <Draggable key={student.id} draggableId={String(student.id)} index={studentIndex}>
-                                  {(provided) => (
-                                    <tr 
-                                      ref={provided.innerRef} 
-                                      {...provided.draggableProps} 
-                                      {...provided.dragHandleProps} 
-                                      key={student.id} 
-                                    >
-                                      <td className={`px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900 ${getFriendSeparationHighlight(student.fullName, cls.students)}`}>{student.fullName}</td>
-                                      <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.existingClass}</td>
-                                      <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.academic}</td>
-                                      <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.behaviour}</td>
-                                    </tr>
-                                  )}
-                                </Draggable>
-                              ))}
-                              {provided.placeholder}
-                            </tbody>
-                          )}
-                        </Droppable>
-                      </table>
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2">
+                Total Number of Classes
+              </label>
+              <input
+                type="number"
+                value={totalClassesInput}
+                onChange={(e) => setTotalClassesInput(parseInt(e.target.value, 10) || 0)}
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                min="0"
+              />
+            </div>
 
-                      <div className="text-sm">
-                        <h5 className="font-semibold mt-4 mb-2 text-gray-700">Class Balance:</h5>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <p className="font-medium">Gender:</p>
-                            {Object.entries(cls.stats.gender).map(([gender, count]) => (
-                              <p key={gender} className={`px-2 py-1 rounded-md`}>
-                                {gender}: {count}
-                              </p>
-                            ))}
-                          </div>
-                          <div>
-                            <p className="font-medium">Academic:</p>
-                            {academicOrder.map(level => (
-                              (cls.stats.academic[level] > 0) &&
-                              <p key={level} className={`px-2 py-1 rounded-md`}>
-                                {level}: {cls.stats.academic[level]}
-                              </p>
-                            ))}
-                          </div>
-                          <div>
-                            <p className="font-medium">Behaviour:</p>
-                            {behaviourOrder.map(level => (
-                              (cls.stats.behaviour[level] > 0) &&
-                              <p key={level} className={`px-2 py-1 rounded-md`}>
-                                {level}: {cls.stats.behaviour[level]}
-                              </p>
-                            ))}
-                          </div>
-                          <div>
-                            <p className="font-medium">Previous Class:</p>
-                            {Object.entries(cls.stats.existingClass).sort((a, b) => a[0].localeCompare(b[0], undefined, {numeric: true})).map(([className, count]) => (
-                              <p key={className} className={`px-2 py-1 rounded-md`}>
-                                {className}: {count}
-                              </p>
-                            ))}
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2">
+                Number of Composite Classes
+              </label>
+              <input
+                type="number"
+                value={compositeClassesInput}
+                onChange={(e) => setCompositeClassesInput(parseInt(e.target.value, 10) || 0)}
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                min="0"
+              />
+               <p className="text-gray-600 text-xs mt-2">
+                Example: 6 Total, 1 Composite = 5 Straight Classes + 1 Composite Class.
+              </p>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2">
+                Class Size Range (for all classes):
+              </label>
+              <div className="flex gap-4">
+                <input
+                  type="number"
+                  value={classSizeRange.min}
+                  onChange={(e) => handleClassSizeChange('min', e.target.value)}
+                  className="shadow appearance-none border rounded w-1/2 py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  placeholder="Min"
+                  min="1"
+                />
+                <input
+                  type="number"
+                  value={classSizeRange.max}
+                  onChange={(e) => handleClassSizeChange('max', e.target.value)}
+                  className="shadow appearance-none border rounded w-1/2 py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  placeholder="Max"
+                  min="1"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={generateClasses}
+          className="bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg focus:outline-none focus:shadow-outline text-xl w-full mb-8"
+        >
+          Generate Classes
+        </button>
+
+        {/* Generated Classes Output */}
+        <DragDropContext onDragEnd={onDragEnd}>
+          {Object.keys(generatedClasses).length > 0 && (
+            <div className="bg-white p-6 rounded-lg shadow-md">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-semibold text-gray-700">Generated Classes</h2>
+                <button
+                  onClick={exportToXLSX}
+                  className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                >
+                  Export to .xlsx
+                </button>
+              </div>
+
+              <p className="text-center text-gray-700 mb-6 font-medium">
+                Feel free to drag and drop if you want a change before you export.
+              </p>
+              
+              {Object.keys(generatedClasses).map(groupName => (
+                <div key={groupName} className="mb-8">
+                  <h3 className="text-xl font-bold mb-4 text-gray-800">{groupName}</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {generatedClasses[groupName].map((cls, index) => (
+                      <div key={index} className="border border-gray-200 rounded-lg p-4 shadow-sm">
+                        <h4 className="text-lg font-semibold mb-3 text-indigo-700">Class {index + 1} ({cls.students.length} students)</h4>
+                        <table className="min-w-full divide-y divide-gray-200 mb-4">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student Name</th>
+                              <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Old Class</th>
+                              <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Academic</th>
+                              <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Behaviour</th>
+                            </tr>
+                          </thead>
+                          <Droppable droppableId={`${groupName}-${index}`}>
+                            {(provided) => (
+                              <tbody {...provided.droppableProps} ref={provided.innerRef}>
+                                {cls.students.sort((a,b) => a.surname.localeCompare(b.surname)).map((student, studentIndex) => (
+                                  <Draggable key={student.id} draggableId={String(student.id)} index={studentIndex}>
+                                    {(provided) => (
+                                      <tr 
+                                        ref={provided.innerRef} 
+                                        {...provided.draggableProps} 
+                                        {...provided.dragHandleProps} 
+                                        key={student.id} 
+                                      >
+                                        <td className={`px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900 ${getFriendSeparationHighlight(student.fullName, cls.students)}`}>{student.fullName}</td>
+                                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.existingClass}</td>
+                                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.academic}</td>
+                                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.behaviour}</td>
+                                      </tr>
+                                    )}
+                                  </Draggable>
+                                ))}
+                                {provided.placeholder}
+                              </tbody>
+                            )}
+                          </Droppable>
+                        </table>
+
+                        <div className="text-sm">
+                          <h5 className="font-semibold mt-4 mb-2 text-gray-700">Class Balance:</h5>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <p className="font-medium">Gender:</p>
+                              {Object.entries(cls.stats.gender).map(([gender, count]) => (
+                                <p key={gender} className={`px-2 py-1 rounded-md`}>
+                                  {gender}: {count}
+                                </p>
+                              ))}
+                            </div>
+                            <div>
+                              <p className="font-medium">Academic:</p>
+                              {academicOrder.map(level => (
+                                (cls.stats.academic[level] > 0) &&
+                                <p key={level} className={`px-2 py-1 rounded-md`}>
+                                  {level}: {cls.stats.academic[level]}
+                                </p>
+                              ))}
+                            </div>
+                            <div>
+                              <p className="font-medium">Behaviour:</p>
+                              {behaviourOrder.map(level => (
+                                (cls.stats.behaviour[level] > 0) &&
+                                <p key={level} className={`px-2 py-1 rounded-md`}>
+                                  {level}: {cls.stats.behaviour[level]}
+                                </p>
+                              ))}
+                            </div>
+                            <div>
+                              <p className="font-medium">Previous Class:</p>
+                              {Object.entries(cls.stats.existingClass).sort((a, b) => a[0].localeCompare(b[0], undefined, {numeric: true})).map(([className, count]) => (
+                                <p key={className} className={`px-2 py-1 rounded-md`}>
+                                  {className}: {count}
+                                </p>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
-      </DragDropContext>
+            ))}
+          </div>
+        )}
+        </DragDropContext>
 
-      <div className="text-center text-gray-600 mt-12 p-4 border-t">
-        <p className="font-semibold">Other apps charge thousands of dollars for this functionality.</p>
-        <p className="mb-2">We're sure this saved you a lot of precious time and we just ask for a fair donation.</p>
-        <p className="text-sm font-mono">Peter Buultjens</p>
-        <p className="text-sm font-mono">BSB: 062-948</p>
-        <p className="text-sm font-mono">Account: 2402 2276</p>
+        <div className="text-center text-gray-600 mt-12 p-4 border-t">
+          <p className="font-semibold">Other apps charge thousands of dollars for this functionality.</p>
+          <p className="mb-2">We're sure this saved you a lot of precious time and we just ask for a fair donation.</p>
+          <p className="text-sm font-mono">Peter Buultjens</p>
+          <p className="text-sm font-mono">BSB: 062-948</p>
+          <p className="text-sm font-mono">Account: 2402 2276</p>
+        </div>
       </div>
-    {/* *** THIS IS THE FIX: Added the closing </div> tag *** */}
-    </div>
+    {/* *** THIS IS THE FIX: Added the closing fragment tag *** */}
+    </>
   );
 }
 
