@@ -27,6 +27,7 @@ function App() {
     const findStudentFullName = (partialName, allStudents) => {
       if (!partialName) return null;
       const pName = partialName.toLowerCase().trim();
+      if (pName === '') return null;
 
       // 1. Try exact full name match (case-insensitive)
       let match = allStudents.find(s => s.fullName.toLowerCase() === pName);
@@ -40,26 +41,34 @@ function App() {
     };
 
     students.forEach(student => {
+      // --- MODIFIED LOGIC: Handle comma-separated names ---
       // Logic for "Request: Pair"
       if (student.requestPair) {
-        const friendFullName = findStudentFullName(student.requestPair, students);
-        // Add request if found, not a self-pair, and not a duplicate
-        if (friendFullName && student.fullName !== friendFullName) {
-          if (!newFriendRequests.some(r => r.students.includes(student.fullName) && r.students.includes(friendFullName))) {
-            newFriendRequests.push({ students: [student.fullName, friendFullName], requestedBy: 'Import' });
+        const partialFriendNames = student.requestPair.split(',');
+        partialFriendNames.forEach(partialName => {
+          const friendFullName = findStudentFullName(partialName, students);
+          // Add request if found, not a self-pair, and not a duplicate
+          if (friendFullName && student.fullName !== friendFullName) {
+            if (!newFriendRequests.some(r => r.students.includes(student.fullName) && r.students.includes(friendFullName))) {
+              newFriendRequests.push({ students: [student.fullName, friendFullName], requestedBy: 'Import' });
+            }
           }
-        }
+        });
       }
 
+      // --- MODIFIED LOGIC: Handle comma-separated names ---
       // Logic for "Request: Separate"
       if (student.requestSeparate) {
-        const separateFullName = findStudentFullName(student.requestSeparate, students);
-        // Add request if found, not a self-pair, and not a duplicate
-        if (separateFullName && student.fullName !== separateFullName) {
-          if (!newSeparationRequests.some(r => r.students.includes(student.fullName) && r.students.includes(separateFullName))) {
-            newSeparationRequests.push({ students: [student.fullName, separateFullName], requestedBy: 'Import' });
+        const partialSeparateNames = student.requestSeparate.split(',');
+        partialSeparateNames.forEach(partialName => {
+          const separateFullName = findStudentFullName(partialName, students);
+          // Add request if found, not a self-pair, and not a duplicate
+          if (separateFullName && student.fullName !== separateFullName) {
+            if (!newSeparationRequests.some(r => r.students.includes(student.fullName) && r.students.includes(separateFullName))) {
+              newSeparationRequests.push({ students: [student.fullName, separateFullName], requestedBy: 'Import' });
+            }
           }
-        }
+        });
       }
     });
 
@@ -134,9 +143,9 @@ function App() {
 
   // Function to download a CSV template
   const downloadTemplate = () => {
-    // Add more examples to template
+    // --- MODIFIED LOGIC: Updated examples for comma-separated names ---
     const headers = "Class,Surname,First Name,Gender,Academic,Behaviour Needs,Request: Pair,Request: Separate";
-    const example1 = "4A,Smith,Jane,Female,High,Good,John Doe,Tom Lee";
+    const example1 = "4A,Smith,Jane,Female,High,Good,\"John Doe, Bob F\",\"Tom Lee, Will B\"";
     const example2 = "4B,Doe,John,Male,2,2,Jane S,";
     const example3 = "4A,Brown,Charlie,Male,Low,Needs Support,,";
     const example4 = "5A,Test,Alice,Female,3,High,,";
@@ -161,7 +170,7 @@ function App() {
     const subHeaderRow = [];
     const colWidths = [];
 
-    // --- FIX: Define styles for Excel export (background fill) ---
+    // Define styles for Excel export (background fill)
     const greenFillStyle = { fill: { fgColor: { rgb: "C6EFCE" } } }; // Light Green Fill
     const redFillStyle = { fill: { fgColor: { rgb: "FFC7CE" } } }; // Light Red Fill
 
@@ -294,7 +303,7 @@ function App() {
       colIndex += 5; // 4 for class, 1 for spacer
     }
 
-    // 6. Add Styling (Highlights) - --- MODIFIED LOGIC ---
+    // 6. Add Styling (Highlights)
     for (let r = 2; r < maxLen + 2; r++) { // Start from data row (index 2)
       colIndex = 0;
       for (let c = 0; c < sortedAllClasses.length; c++) {
@@ -391,6 +400,7 @@ function App() {
     }
 
     // 2. Handle Friend Requests (pre-seeding)
+    // Note: This logic is robust to multiple requests for the same person
     friendRequests.forEach(req => {
       const [name1, name2] = req.students;
       // Find students *in this pool*
@@ -565,8 +575,7 @@ function App() {
   };
 
   /**
-   * --- THIS IS THE FIX ---
-   * This function now returns Tailwind background classes.
+   * Returns Tailwind background classes.
    * 'bg-green-200' for successful pairs.
    * 'bg-red-200' for *any* student in a separation request.
    */
@@ -619,7 +628,8 @@ function App() {
           <textarea
             id="studentNames"
             className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mb-4 h-32"
-            placeholder="Class&#x9;Surname&#x9;First Name&#x9;Gender&#x9;Academic&#x9;Behaviour Needs&#x9;Request: Pair&#x9;Request: Separate&#10;7A&#x9;Smith&#x9;Jane&#x9;Female&#x9;High&#x9;Good&#x9;John D&#x9;Tom Lee&#10;7B&#x9;Doe&#x9;John&#x9;Male&#x9;2&#x9;2&#x9;Jane Smith&#x9;"
+            // --- MODIFIED LOGIC: Updated placeholder ---
+            placeholder="Class&#x9;Surname&#x9;First Name&#x9;Gender&#x9;Academic&#x9;Behaviour Needs&#x9;Request: Pair&#x9;Request: Separate&#10;7A&#x9;Smith&#x9;Jane&#x9;Female&#x9;High&#x9;Good&#x9;John D, Bob F&#x9;Tom L, Sam P&#10;7B&#x9;Doe&#x9;John&#x9;Male&#x9;2&#x9;2&#x9;Jane Smith&#x9;"
             onChange={handleStudentNamesInput}
           ></textarea>
           <p className="text-gray-600 text-xs mb-4">
@@ -627,7 +637,7 @@ function App() {
           </p>
 
           <p className="text-gray-600 text-xs mt-2 mb-4">
-            Academic/Behaviour columns can use: `High/Medium/Low`, `3/2/1`, or `Good/Needs Support` etc.
+            Use commas to separate multiple names in request columns.
           </p>
         </div>
 
@@ -745,7 +755,7 @@ function App() {
                       <tbody>
                         {cls.students.sort((a, b) => a.surname.localeCompare(b.surname)).map(student => (
                           <tr key={student.id}>
-                            {/* --- FIX: Class applied here for background highlight, font remains black (text-gray-900) --- */}
+                            {/* Class applied here for background highlight, font remains black (text-gray-900) */}
                             <td className={`px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900 ${getFriendSeparationHighlight(student.fullName, cls.students)}`}>{student.fullName}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.existingClass}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.academic}</td>
