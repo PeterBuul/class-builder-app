@@ -1,74 +1,95 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 function App() {
   const [students, setStudents] = useState([]);
-
-  // Simplified Class Parameters state
+  
+  // Parameters state
   const [yearLevelsInput, setYearLevelsInput] = useState('7');
   const [totalClassesInput, setTotalClassesInput] = useState(0);
   const [compositeClassesInput, setCompositeClassesInput] = useState(0);
-
   const [classSizeRange, setClassSizeRange] = useState({ min: 20, max: 30 });
+  
   const [friendRequests, setFriendRequests] = useState([]);
   const [separationRequests, setSeparationRequests] = useState([]);
   const [generatedClasses, setGeneratedClasses] = useState({});
+  const [notification, setNotification] = useState('');
 
   // Define stat orders
   const academicOrder = ['High', 'Average', 'Low', 'Unknown'];
   const behaviourOrder = ['High', 'Average', 'Low', 'Needs Support', 'Excellent', 'Good', 'Unknown'];
 
-  // Auto-parse friend/separation requests from student data
+  // --- SAVE & LOAD FUNCTIONALITY ---
+  const saveProgress = () => {
+    const dataToSave = {
+      students,
+      yearLevelsInput,
+      totalClassesInput,
+      compositeClassesInput,
+      classSizeRange,
+      friendRequests,
+      separationRequests,
+      generatedClasses
+    };
+    localStorage.setItem('classBuilderSave', JSON.stringify(dataToSave));
+    showNotification('Progress Saved! You can close the browser and come back later.');
+  };
+
+  const loadProgress = () => {
+    const savedData = localStorage.getItem('classBuilderSave');
+    if (savedData) {
+      const parsed = JSON.parse(savedData);
+      setStudents(parsed.students || []);
+      setYearLevelsInput(parsed.yearLevelsInput || '7');
+      setTotalClassesInput(parsed.totalClassesInput || 0);
+      setCompositeClassesInput(parsed.compositeClassesInput || 0);
+      setClassSizeRange(parsed.classSizeRange || { min: 20, max: 30 });
+      setFriendRequests(parsed.friendRequests || []);
+      setSeparationRequests(parsed.separationRequests || []);
+      setGeneratedClasses(parsed.generatedClasses || {});
+      showNotification('Progress Loaded successfully.');
+    } else {
+      showNotification('No saved progress found.');
+    }
+  };
+
+  const showNotification = (msg) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(''), 3000);
+  };
+
+  // Auto-parse requests
   useEffect(() => {
     const newFriendRequests = [];
     const newSeparationRequests = [];
 
-    // "Smart" name finder. Finds "John D" or "John" from the list.
     const findStudentFullName = (partialName, allStudents) => {
       if (!partialName) return null;
       const pName = partialName.toLowerCase().trim();
-      if (pName === '') return null;
-
-      // 1. Try exact full name match (case-insensitive)
       let match = allStudents.find(s => s.fullName.toLowerCase() === pName);
       if (match) return match.fullName;
-
-      // 2. Try "starts with" match (e.g., "John D" matches "John Doe")
       match = allStudents.find(s => s.fullName.toLowerCase().startsWith(pName));
       if (match) return match.fullName;
-
-      return null; // No match found
+      return null;
     };
 
     students.forEach(student => {
-      // --- MODIFIED LOGIC: Handle comma-separated names ---
-      // Logic for "Request: Pair"
       if (student.requestPair) {
-        const partialFriendNames = student.requestPair.split(',');
-        partialFriendNames.forEach(partialName => {
-          const friendFullName = findStudentFullName(partialName, students);
-          // Add request if found, not a self-pair, and not a duplicate
-          if (friendFullName && student.fullName !== friendFullName) {
-            if (!newFriendRequests.some(r => r.students.includes(student.fullName) && r.students.includes(friendFullName))) {
-              newFriendRequests.push({ students: [student.fullName, friendFullName], requestedBy: 'Import' });
-            }
+        const friendFullName = findStudentFullName(student.requestPair, students);
+        if (friendFullName && student.fullName !== friendFullName) {
+          if (!newFriendRequests.some(r => r.students.includes(student.fullName) && r.students.includes(friendFullName))) {
+            newFriendRequests.push({ students: [student.fullName, friendFullName], requestedBy: 'Import' });
           }
-        });
+        }
       }
-
-      // --- MODIFIED LOGIC: Handle comma-separated names ---
-      // Logic for "Request: Separate"
       if (student.requestSeparate) {
-        const partialSeparateNames = student.requestSeparate.split(',');
-        partialSeparateNames.forEach(partialName => {
-          const separateFullName = findStudentFullName(partialName, students);
-          // Add request if found, not a self-pair, and not a duplicate
-          if (separateFullName && student.fullName !== separateFullName) {
-            if (!newSeparationRequests.some(r => r.students.includes(student.fullName) && r.students.includes(separateFullName))) {
-              newSeparationRequests.push({ students: [student.fullName, separateFullName], requestedBy: 'Import' });
-            }
+        const separateFullName = findStudentFullName(student.requestSeparate, students);
+        if (separateFullName && student.fullName !== separateFullName) {
+          if (!newSeparationRequests.some(r => r.students.includes(student.fullName) && r.students.includes(separateFullName))) {
+            newSeparationRequests.push({ students: [student.fullName, separateFullName], requestedBy: 'Import' });
           }
-        });
+        }
       }
     });
 
@@ -76,28 +97,23 @@ function App() {
     setSeparationRequests(newSeparationRequests);
   }, [students]);
 
-  // Normalizes flexible ranking inputs (e.g., "1", "low", "below")
   const normalizeRanking = (input) => {
     const val = String(input).toLowerCase().trim();
     if (['low', '1', 'below'].includes(val)) return 'Low';
     if (['at', '2', 'medium', 'average'].includes(val)) return 'Average';
     if (['above', '3', 'high'].includes(val)) return 'High';
-    // Handle behaviour specific
     if (['excellent'].includes(val)) return 'Excellent';
     if (['good'].includes(val)) return 'Good';
     if (['needs support'].includes(val)) return 'Needs Support';
-
     if (val === '') return 'Unknown';
-    // Capitalize first letter if it's a non-standard value
     return val.charAt(0).toUpperCase() + val.slice(1);
   };
 
-  // Parse student data from spreadsheet or text paste
   const parseStudentData = (data) => {
     return data.map((row, index) => {
       const fullName = `${row['First Name'] || ''} ${row.Surname || ''}`.trim();
       return {
-        id: Date.now() + Math.random() + index,
+        id: `student-${Date.now()}-${index}-${Math.random()}`, // Robust ID for DND
         firstName: row['First Name'] || '',
         surname: row.Surname || '',
         fullName: fullName || `Student ${index + 1}`,
@@ -111,18 +127,14 @@ function App() {
     }).filter(s => s.fullName !== 'Student');
   };
 
-  // Handle pasted text data
   const handleStudentNamesInput = (e) => {
     const text = e.target.value;
     const rows = text.split('\n').filter(row => row.trim() !== '');
-
     const headerRow = rows[0].split('\t');
-    const hasHeader = headerRow.includes('Surname') || headerRow.includes('Class');
-
-    const dataRows = (hasHeader ? rows.slice(1) : rows)
+    
+    const dataRows = (headerRow.includes('Surname') || headerRow.includes('Class') ? rows.slice(1) : rows)
       .map(row => row.split('\t'));
 
-    // Map to new 8-column structure
     const dataObjects = dataRows.map(row => ({
       'Class': row[0],
       'Surname': row[1],
@@ -141,18 +153,16 @@ function App() {
     setClassSizeRange(prev => ({ ...prev, [field]: parseInt(value, 10) || 0 }));
   };
 
-  // Function to download a CSV template
   const downloadTemplate = () => {
-    // --- MODIFIED LOGIC: Updated examples for comma-separated names ---
     const headers = "Class,Surname,First Name,Gender,Academic,Behaviour Needs,Request: Pair,Request: Separate";
-    const example1 = "4A,Smith,Jane,Female,High,Good,\"John Doe, Bob F\",\"Tom Lee, Will B\"";
+    const example1 = "4A,Smith,Jane,Female,High,Good,John Doe,Tom Lee";
     const example2 = "4B,Doe,John,Male,2,2,Jane S,";
     const example3 = "4A,Brown,Charlie,Male,Low,Needs Support,,";
     const example4 = "5A,Test,Alice,Female,3,High,,";
     const example5 = ",Note:,Academic/Behaviour scale can be High/Average/Low, 3/2/1, or Good/Needs Support etc.,,,,";
-    const csvContent = "data:text/csv;charset=utf-8," +
+    const csvContent = "data:text/csv;charset=utf-8," + 
       [headers, example1, example2, example3, example4, example5].join("\n");
-
+      
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -162,7 +172,6 @@ function App() {
     document.body.removeChild(link);
   };
 
-  // Function to export generated classes to XLSX
   const exportToXLSX = () => {
     const wb = XLSX.utils.book_new();
     const wsData = [];
@@ -170,179 +179,112 @@ function App() {
     const subHeaderRow = [];
     const colWidths = [];
 
-    // Define styles for Excel export (background fill)
-    const greenFillStyle = { fill: { fgColor: { rgb: "C6EFCE" } } }; // Light Green Fill
-    const redFillStyle = { fill: { fgColor: { rgb: "FFC7CE" } } }; // Light Red Fill
-
-    // Flatten all generated classes from all groups into one list
     const allclasses = [];
     const groupNames = Object.keys(generatedClasses);
-    let maxLen = 0; // Find max class length across all classes
-
+    let maxLen = 0;
+    
     groupNames.forEach(groupName => {
       generatedClasses[groupName].forEach((cls, index) => {
-        // Add the group name and index to each class object
-        allclasses.push({
-          ...cls,
-          groupName: groupName,
-          classIndex: index + 1 // 1-based index
-        });
+        allclasses.push({ ...cls, groupName: groupName, classIndex: index + 1 });
         if (cls.students.length > maxLen) maxLen = cls.students.length;
       });
     });
 
     if (allclasses.length === 0) {
-      console.error("No data to export because no classes were generated.");
+      alert("No classes generated to export.");
       return;
     }
-
-    // 1. Create Headers
+    
     let colIndex = 0;
     allclasses.forEach((cls) => {
-      const classTitle = `${cls.groupName} - Class ${cls.classIndex} (${cls.students.length} students)`;
-
+      const classTitle = `${cls.groupName} - Class ${cls.classIndex} (${cls.students.length})`;
       headerRow[colIndex] = classTitle;
-
       subHeaderRow[colIndex] = 'Student Name';
-      subHeaderRow[colIndex + 1] = 'Old Class';
-      subHeaderRow[colIndex + 2] = 'Academic';
-      subHeaderRow[colIndex + 3] = 'Behaviour';
-
-      // Set col widths
-      colWidths.push({ wch: 30 }, { wch: 10 }, { wch: 10 }, { wch: 10 });
-
-      // Add spacer column
-      colWidths.push({ wch: 5 }); // Spacer col width
-      colIndex += 5; // 4 for data + 1 for spacer
+      subHeaderRow[colIndex+1] = 'Old Class';
+      subHeaderRow[colIndex+2] = 'Academic';
+      subHeaderRow[colIndex+3] = 'Behaviour';
+      colWidths.push({wch: 30}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 5});
+      colIndex += 5;
     });
-
+    
     wsData.push(headerRow);
     wsData.push(subHeaderRow);
 
-    // Pre-sort all student lists ONCE
     const sortedAllClasses = allclasses.map(cls => ({
       ...cls,
-      students: cls.students.sort((a, b) => a.surname.localeCompare(b.surname))
+      students: cls.students.sort((a,b) => a.surname.localeCompare(b.surname))
     }));
-
-    // 2. Create Data Rows
-    for (let i = 0; i < maxLen; i++) { // Row loop (student index)
+    
+    for (let i = 0; i < maxLen; i++) {
       const row = [];
       colIndex = 0;
-      for (let c = 0; c < sortedAllClasses.length; c++) { // Column loop (class index)
+      for (let c = 0; c < sortedAllClasses.length; c++) {
         const cls = sortedAllClasses[c];
         const student = cls.students[i];
         if (student) {
           row[colIndex] = student.fullName;
-          row[colIndex + 1] = student.existingClass;
-          row[colIndex + 2] = student.academic;
-          row[colIndex + 3] = student.behaviour;
+          row[colIndex+1] = student.existingClass;
+          row[colIndex+2] = student.academic;
+          row[colIndex+3] = student.behaviour;
         }
-        // Spacer is implicitly null
         colIndex += 5;
       }
       wsData.push(row);
     }
-
-    // 3. Add Stats Rows
-    wsData.push([]); // Spacer row
-    const statsStartRow = wsData.length; // This is the row index where stats titles will start
-
-    const balanceTitleRow = [];
-    const genderRow = [];
-    const academicRow = [];
-    const behaviourRow = [];
+    
+    wsData.push([]); 
+    const statsStartRow = wsData.length;
+    const balanceTitleRow = [], genderRow = [], academicRow = [], behaviourRow = [];
 
     colIndex = 0;
     allclasses.forEach((cls) => {
       balanceTitleRow[colIndex] = "--- Class Balance ---";
-
       genderRow[colIndex] = "Gender:";
-      genderRow[colIndex + 1] = Object.entries(cls.stats.gender).map(([k, v]) => `${k}: ${v}`).join(', ');
-
-      // Use ordered stats
+      genderRow[colIndex+1] = Object.entries(cls.stats.gender).map(([k, v]) => `${k}: ${v}`).join(', ');
       academicRow[colIndex] = "Academic:";
-      academicRow[colIndex + 1] = academicOrder
-        .map(level => (cls.stats.academic[level] > 0 ? `${level}: ${cls.stats.academic[level]}` : null))
-        .filter(Boolean) // Remove nulls
-        .join(', ');
-
+      academicRow[colIndex+1] = academicOrder.map(level => (cls.stats.academic[level] > 0 ? `${level}: ${cls.stats.academic[level]}` : null)).filter(Boolean).join(', ');
       behaviourRow[colIndex] = "Behaviour:";
-      behaviourRow[colIndex + 1] = behaviourOrder
-        .map(level => (cls.stats.behaviour[level] > 0 ? `${level}: ${cls.stats.behaviour[level]}` : null))
-        .filter(Boolean) // Remove nulls
-        .join(', ');
-
-      colIndex += 5; // Move to the start of the next class block (4 cols + 1 spacer)
+      behaviourRow[colIndex+1] = behaviourOrder.map(level => (cls.stats.behaviour[level] > 0 ? `${level}: ${cls.stats.behaviour[level]}` : null)).filter(Boolean).join(', ');
+      colIndex += 5;
     });
+    
+    wsData.push(balanceTitleRow, genderRow, academicRow, behaviourRow);
 
-    wsData.push(balanceTitleRow, genderRow, academicRow, behaviourRow); // Removed existingRow
-
-    // 4. Create worksheet
     const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-    // 5. Add Merges
     ws['!merges'] = [];
     colIndex = 0;
     for (let i = 0; i < allclasses.length; i++) {
-      // Header merge
-      ws['!merges'].push({
-        s: { c: colIndex, r: 0 }, // Start cell (col, row)
-        e: { c: colIndex + 3, r: 0 }  // End cell (col, row)
-      });
-      // Stats Title merge
-      ws['!merges'].push({
-        s: { c: colIndex, r: statsStartRow },
-        e: { c: colIndex + 3, r: statsStartRow }
-      });
-      // Stats Data merges
-      ws['!merges'].push({ s: { c: colIndex + 1, r: statsStartRow + 1 }, e: { c: colIndex + 3, r: statsStartRow + 1 } }); // Gender
-      ws['!merges'].push({ s: { c: colIndex + 1, r: statsStartRow + 2 }, e: { c: colIndex + 3, r: statsStartRow + 2 } }); // Academic
-      ws['!merges'].push({ s: { c: colIndex + 1, r: statsStartRow + 3 }, e: { c: colIndex + 3, r: statsStartRow + 3 } }); // Behaviour
-
-      colIndex += 5; // 4 for class, 1 for spacer
+      ws['!merges'].push({ s: { c: colIndex, r: 0 }, e: { c: colIndex + 3, r: 0 } });
+      ws['!merges'].push({ s: { c: colIndex, r: statsStartRow }, e: { c: colIndex + 3, r: statsStartRow } });
+      ws['!merges'].push({ s: { c: colIndex+1, r: statsStartRow+1 }, e: { c: colIndex + 3, r: statsStartRow+1 } });
+      ws['!merges'].push({ s: { c: colIndex+1, r: statsStartRow+2 }, e: { c: colIndex + 3, r: statsStartRow+2 } });
+      ws['!merges'].push({ s: { c: colIndex+1, r: statsStartRow+3 }, e: { c: colIndex + 3, r: statsStartRow+3 } });
+      colIndex += 5;
     }
-
-    // 6. Add Styling (Highlights)
-    for (let r = 2; r < maxLen + 2; r++) { // Start from data row (index 2)
+    
+    const boldStyle = { font: { bold: true } };
+    for (let r = 2; r < maxLen + 2; r++) {
       colIndex = 0;
       for (let c = 0; c < sortedAllClasses.length; c++) {
-        // Get the student for this row
-        const student = sortedAllClasses[c].students[r - 2];
-
+        const student = sortedAllClasses[c].students[r-2];
         if (student) {
-          const studentName = student.fullName;
-          const classStudents = sortedAllClasses[c].students;
-
-          // Call the top-level function
-          const highlight = getFriendSeparationHighlight(studentName, classStudents);
-
-          // Apply style to cell
-          const studentCellRef = XLSX.utils.encode_cell({ r: r, c: colIndex });
-          const studentCell = ws[studentCellRef];
-
-          if (studentCell) {
-            if (highlight.includes('bg-green-200')) {
-              studentCell.s = greenFillStyle; // Apply green fill
-            } else if (highlight.includes('bg-red-200')) {
-              studentCell.s = redFillStyle; // Apply red fill
+          const highlight = getFriendSeparationHighlight(student.fullName, sortedAllClasses[c].students);
+          if (highlight === 'font-bold') {
+            for (let i = 0; i < 4; i++) {
+              const cellRef = XLSX.utils.encode_cell({ r: r, c: colIndex + i });
+              if (!ws[cellRef]) ws[cellRef] = { v: wsData[r][colIndex + i] };
+              ws[cellRef].s = boldStyle;
             }
           }
         }
-        colIndex += 5; // 4 for class, 1 for spacer
+        colIndex += 5;
       }
     }
 
-    // 7. Set Column Widths
     ws['!cols'] = colWidths;
-
-    // 8. Add worksheet to workbook (only one sheet)
     XLSX.utils.book_append_sheet(wb, ws, "Generated Classes");
-
-    // 9. Write and download
     XLSX.writeFile(wb, "generated_classes.xlsx");
   };
-
 
   const violatesSeparation = (student, classStudents) => {
     for (const req of separationRequests) {
@@ -357,9 +299,7 @@ function App() {
     const totalCount = groupTotals[category][value] || 0;
     const idealCountPerClass = totalCount / numClassesToMake;
     const currentCount = (cls.stats[category] && cls.stats[category][value]) || 0;
-    const currentBadness = Math.pow(currentCount - idealCountPerClass, 2);
-    const newBadness = Math.pow((currentCount + 1) - idealCountPerClass, 2);
-    return newBadness - currentBadness;
+    return Math.pow((currentCount + 1) - idealCountPerClass, 2) - Math.pow(currentCount - idealCountPerClass, 2);
   };
 
   const calculatePlacementCost = (student, cls, groupTotals, numClassesToMake) => {
@@ -374,13 +314,8 @@ function App() {
     return cost;
   };
 
-  /**
-   * This is the core balancing logic, extracted into a reusable function.
-   */
   const runBalancing = (studentPool, numClassesToMake) => {
-    if (numClassesToMake <= 0 || !studentPool || studentPool.length === 0) {
-      return [[], []]; // Return empty results
-    }
+    if (numClassesToMake <= 0 || !studentPool || studentPool.length === 0) return [[], []];
 
     const availableStudents = [...studentPool];
     const placedStudentIds = [];
@@ -389,7 +324,6 @@ function App() {
       stats: { gender: {}, academic: {}, behaviour: {}, existingClass: {} },
     }));
 
-    // 1. Pre-calculate totals for this specific pool
     const groupTotals = { academic: {}, behaviour: {}, gender: {}, existingClass: {} };
     const categories = ['academic', 'behaviour', 'gender', 'existingClass'];
     for (const student of availableStudents) {
@@ -399,50 +333,34 @@ function App() {
       }
     }
 
-    // 2. Handle Friend Requests (pre-seeding)
-    // Note: This logic is robust to multiple requests for the same person
     friendRequests.forEach(req => {
       const [name1, name2] = req.students;
-      // Find students *in this pool*
       const s1Index = availableStudents.findIndex(s => s.fullName === name1 && !placedStudentIds.includes(s.id));
       const s2Index = availableStudents.findIndex(s => s.fullName === name2 && !placedStudentIds.includes(s.id));
-
+      
       if (s1Index > -1 && s2Index > -1) {
         const s1 = availableStudents[s1Index];
         const s2 = availableStudents[s2Index];
-
         newClasses.sort((a, b) => a.students.length - b.students.length);
-        const bestClass = newClasses[0];
-
-        if (bestClass.students.length + 2 <= classSizeRange.max) {
-          bestClass.students.push(s1, s2);
-          updateClassStats(bestClass, s1);
-          updateClassStats(bestClass, s2);
+        if (newClasses[0].students.length + 2 <= classSizeRange.max) {
+          newClasses[0].students.push(s1, s2);
+          updateClassStats(newClasses[0], s1);
+          updateClassStats(newClasses[0], s2);
           placedStudentIds.push(s1.id, s2.id);
         }
       }
     });
-
-    let remainingStudents = availableStudents
-      .filter(s => !placedStudentIds.includes(s.id));
-
-    // Shuffle remainingStudents *outside* a loop
+    
+    let remainingStudents = availableStudents.filter(s => !placedStudentIds.includes(s.id));
     for (let i = remainingStudents.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [remainingStudents[i], remainingStudents[j]] = [remainingStudents[j], remainingStudents[i]];
+        const j = Math.floor(Math.random() * (i + 1));
+        [remainingStudents[i], remainingStudents[j]] = [remainingStudents[j], remainingStudents[i]];
     }
 
-    // 3. Distribute all remaining students based on lowest cost
     for (const student of remainingStudents) {
       let bestClass = null;
       let minCost = Infinity;
-
-      // Shuffle classes for tie-breaking
-      const shuffledClasses = [...newClasses]; // Create a copy
-      for (let i = shuffledClasses.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffledClasses[i], shuffledClasses[j]] = [shuffledClasses[j], shuffledClasses[i]];
-      }
+      const shuffledClasses = [...newClasses].sort(() => Math.random() - 0.5);
 
       for (const cls of shuffledClasses) {
         const cost = calculatePlacementCost(student, cls, groupTotals, numClassesToMake);
@@ -463,106 +381,75 @@ function App() {
           updateClassStats(fallbackClass, student);
           placedStudentIds.push(student.id);
         } else {
-          console.error(`!!! FAILED TO PLACE ${student.fullName}. All classes are full.`);
+           console.error(`!!! FAILED TO PLACE ${student.fullName}.`);
         }
       }
     }
     return [newClasses, placedStudentIds];
   }
 
-  // Main logic to generate classes
   const generateClasses = () => {
-    // 1. Get user inputs
     const yearLevels = yearLevelsInput.split(',').map(s => s.trim()).filter(Boolean);
     const numTotalClasses = totalClassesInput;
     const numCompositeClasses = compositeClassesInput;
     const numStraightClasses = numTotalClasses - numCompositeClasses;
 
     if (numTotalClasses <= 0 || yearLevels.length === 0) {
-      setGeneratedClasses({}); // Clear old results
+      setGeneratedClasses({});
       return;
     }
 
     const finalClasses = {};
     const allPlacedStudentIds = new Set();
+    const allGroupStudents = students.filter(s => yearLevels.some(year => s.existingClass.startsWith(year)));
 
-    // 2. Get all students for this entire group
-    // Filter students whose class *starts with* any of the input years.
-    const allGroupStudents = students.filter(s => {
-      const studentClass = s.existingClass; // e.g., "4A" or "5/6A"
-      // Check if studentClass starts with any of the user-inputted year levels
-      return yearLevels.some(year => studentClass.startsWith(year));
-    });
-
-    // 3. Create and count separate pools for each straight year level
     const straightYearPools = {};
     const straightYearCounts = {};
     let totalStraightStudents = 0;
 
     yearLevels.forEach(year => {
-      // Get students *just* for this year
       const yearPool = allGroupStudents.filter(s => s.existingClass.startsWith(year));
       straightYearPools[year] = yearPool;
       straightYearCounts[year] = yearPool.length;
       totalStraightStudents += yearPool.length;
     });
 
-    // 4. Generate STRAIGHT classes proportionally
     let straightClassesCreated = 0;
     yearLevels.forEach((year, index) => {
       const studentCount = straightYearCounts[year];
-      if (studentCount === 0) return; // No students for this year
-
-      // Pro-rata calculation
+      if (studentCount === 0) return;
+      
       let numClassesForThisYear;
       if (numStraightClasses <= 0) {
-        numClassesForThisYear = 0;
+         numClassesForThisYear = 0;
       } else if (index === yearLevels.length - 1) {
-        // Last year level gets the remaining classes
         numClassesForThisYear = numStraightClasses - straightClassesCreated;
       } else {
-        // Pro-rata based on number of students
         numClassesForThisYear = (totalStraightStudents > 0) ? Math.round((studentCount / totalStraightStudents) * numStraightClasses) : 0;
         straightClassesCreated += numClassesForThisYear;
       }
 
-      if (numClassesForThisYear < 0) numClassesForThisYear = 0;
+      if(numClassesForThisYear < 0) numClassesForThisYear = 0;
 
-      const [newClasses, placedIds] = runBalancing(
-        straightYearPools[year],
-        numClassesForThisYear
-      );
-
+      const [newClasses, placedIds] = runBalancing(straightYearPools[year], numClassesForThisYear);
       if (newClasses.length > 0) {
-        // Name class with *next* year's level
         finalClasses[`Straight Year ${parseInt(year, 10) + 1}`] = newClasses;
       }
       placedIds.forEach(id => allPlacedStudentIds.add(id));
     });
 
-    // 5. Generate COMPOSITE classes from the leftovers
     const compositePool = allGroupStudents.filter(s => !allPlacedStudentIds.has(s.id));
-
-    const [compositeClasses, placedIds] = runBalancing(
-      compositePool,
-      numCompositeClasses
-    );
+    const [compositeClasses, placedIds] = runBalancing(compositePool, numCompositeClasses);
 
     if (compositeClasses.length > 0) {
-      // Name composite with *next* year's levels
       const nextYears = yearLevels.map(y => parseInt(y, 10) + 1).join('/');
-      const groupName = `Composite ${nextYears}`;
-      finalClasses[groupName] = compositeClasses;
+      finalClasses[`Composite ${nextYears}`] = compositeClasses;
     }
-
-    // Add these IDs to the set (even though it's the last step, it's good practice)
-    placedIds.forEach(id => allPlacedStudentIds.add(id));
-
-    setGeneratedClasses(finalClasses); // Set the final object
+    setGeneratedClasses(finalClasses);
+    showNotification("Classes Generated Successfully!");
   };
 
   const updateClassStats = (cls, student) => {
-    // Ensure all categories exist for stats
     const gender = student.gender || 'Unknown';
     const academic = student.academic || 'Unknown';
     const behaviour = student.behaviour || 'Unknown';
@@ -573,34 +460,52 @@ function App() {
     cls.stats.behaviour[behaviour] = (cls.stats.behaviour[behaviour] || 0) + 1;
     cls.stats.existingClass[existingClass] = (cls.stats.existingClass[existingClass] || 0) + 1;
   };
+  
+  // DND Logic
+  const onDragEnd = (result) => {
+    const { source, destination, draggableId } = result;
+    if (!destination) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
 
-  /**
-   * Returns Tailwind background classes.
-   * 'bg-green-200' for successful pairs.
-   * 'bg-red-200' for *any* student in a separation request.
-   */
+    const sourceIdParts = source.droppableId.split('::');
+    const destIdParts = destination.droppableId.split('::');
+    const sourceGroupName = sourceIdParts[0];
+    const sourceClassIndex = parseInt(sourceIdParts[1], 10);
+    const destGroupName = destIdParts[0];
+    const destClassIndex = parseInt(destIdParts[1], 10);
+
+    const newGeneratedClasses = { ...generatedClasses };
+    const sourceClass = newGeneratedClasses[sourceGroupName][sourceClassIndex];
+    const destClass = newGeneratedClasses[destGroupName][destClassIndex];
+
+    const movedStudentIndex = sourceClass.students.findIndex(s => s.id === draggableId);
+    const [movedStudent] = sourceClass.students.splice(movedStudentIndex, 1);
+    destClass.students.splice(destination.index, 0, movedStudent);
+
+    // Re-calc stats for source and dest
+    const recalc = (c) => {
+      c.stats = { gender: {}, academic: {}, behaviour: {}, existingClass: {} };
+      c.students.forEach(s => updateClassStats(c, s));
+    };
+    recalc(sourceClass);
+    recalc(destClass);
+
+    setGeneratedClasses(newGeneratedClasses);
+  };
+
   const getFriendSeparationHighlight = (studentName, classStudents) => {
-    // Check for SUCCESSFUL pairing (GREEN)
-    for (const req of friendRequests) {
-      const [s1, s2] = req.students;
-      // Is this student part of the request?
-      if (studentName === s1 || studentName === s2) {
-        // Is the *other* person also in the class?
-        const partnerName = (studentName === s1) ? s2 : s1;
-        if (classStudents.some(s => s.fullName === partnerName)) {
-          return 'bg-green-200'; // Successful pairing
-        }
+    let highlight = '';
+    friendRequests.forEach(req => {
+      if (req.students.includes(studentName) && classStudents.some(s => req.students.includes(s.fullName) && s.fullName !== studentName)) {
+        highlight = 'font-bold';
       }
-    }
-
-    // Check if student is in *any* separation request (RED)
-    for (const req of separationRequests) {
+    });
+    separationRequests.forEach(req => {
       if (req.students.includes(studentName)) {
-        return 'bg-red-200'; // Is in a separation request
+        highlight = 'font-bold';
       }
-    }
-
-    return ''; // No highlight
+    });
+    return highlight;
   };
 
   return (
@@ -610,13 +515,25 @@ function App() {
         <p className="text-xl text-gray-600 mb-8">Making building classes as easy as 1,2...3</p>
       </div>
 
+      {notification && (
+        <div className="fixed top-4 right-4 bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 shadow-md z-50" role="alert">
+          <p>{notification}</p>
+        </div>
+      )}
+
+      <div className="flex gap-4 mb-6 justify-center">
+         <button onClick={saveProgress} className="bg-indigo-600 hover:bg-indigo-800 text-white font-bold py-2 px-6 rounded shadow">
+            Save Progress
+         </button>
+         <button onClick={loadProgress} className="bg-gray-600 hover:bg-gray-800 text-white font-bold py-2 px-6 rounded shadow">
+            Load Progress
+         </button>
+      </div>
+
       <div className="mb-6 max-w-lg mx-auto">
-        <button
-          onClick={downloadTemplate}
-          className="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-        >
-          Download CSV Template
-        </button>
+          <button onClick={downloadTemplate} className="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+            Download CSV Template
+          </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -628,189 +545,106 @@ function App() {
           <textarea
             id="studentNames"
             className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mb-4 h-32"
-            // --- MODIFIED LOGIC: Updated placeholder ---
-            placeholder="Class&#x9;Surname&#x9;First Name&#x9;Gender&#x9;Academic&#x9;Behaviour Needs&#x9;Request: Pair&#x9;Request: Separate&#10;7A&#x9;Smith&#x9;Jane&#x9;Female&#x9;High&#x9;Good&#x9;John D, Bob F&#x9;Tom L, Sam P&#10;7B&#x9;Doe&#x9;John&#x9;Male&#x9;2&#x9;2&#x9;Jane Smith&#x9;"
+            placeholder="Class    Surname    First Name    Gender..."
             onChange={handleStudentNamesInput}
           ></textarea>
-          <p className="text-gray-600 text-xs mb-4">
-            Columns: **Class, Surname, First Name, Gender, Academic, Behaviour Needs, Request: Pair, Request: Separate**
-          </p>
-
-          <p className="text-gray-600 text-xs mt-2 mb-4">
-            Use commas to separate multiple names in request columns.
-          </p>
         </div>
 
         {/* Class Parameters */}
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold mb-4 text-gray-700">Class Parameters</h2>
-
           <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2">
-              Current Year Levels (e.g., 7 or 4, 5)
-            </label>
-            <input
-              type="text"
-              value={yearLevelsInput}
-              onChange={(e) => setYearLevelsInput(e.target.value)}
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              placeholder="e.g., 7 or 4, 5"
-            />
-            <p className="text-gray-600 text-xs mt-2">
-              List the **current** year levels to pull students from (e.g., "4, 5" to make a 5/6 group).
-            </p>
+            <label className="block text-gray-700 text-sm font-bold mb-2">Current Year Levels (e.g., 7 or 4, 5)</label>
+            <input type="text" value={yearLevelsInput} onChange={(e) => setYearLevelsInput(e.target.value)} className="shadow border rounded w-full py-2 px-3" />
           </div>
-
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2">
-              Total Number of Classes
-            </label>
-            <input
-              type="number"
-              value={totalClassesInput}
-              onChange={(e) => setTotalClassesInput(parseInt(e.target.value, 10) || 0)}
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              min="0"
-            />
+          <div className="flex gap-4 mb-4">
+             <div className="w-1/2">
+                <label className="block text-gray-700 text-sm font-bold mb-2">Total Classes</label>
+                <input type="number" value={totalClassesInput} onChange={(e) => setTotalClassesInput(parseInt(e.target.value)||0)} className="shadow border rounded w-full py-2 px-3" />
+             </div>
+             <div className="w-1/2">
+                <label className="block text-gray-700 text-sm font-bold mb-2">Composite Classes</label>
+                <input type="number" value={compositeClassesInput} onChange={(e) => setCompositeClassesInput(parseInt(e.target.value)||0)} className="shadow border rounded w-full py-2 px-3" />
+             </div>
           </div>
-
           <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2">
-              Number of Composite Classes
-            </label>
-            <input
-              type="number"
-              value={compositeClassesInput}
-              onChange={(e) => setCompositeClassesInput(parseInt(e.target.value, 10) || 0)}
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              min="0"
-            />
-            <p className="text-gray-600 text-xs mt-2">
-              Example: 6 Total, 1 Composite = 5 Straight Classes + 1 Composite Class.
-            </p>
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2">
-              Class Size Range (for all classes):
-            </label>
-            <div className="flex gap-4">
-              <input
-                type="number"
-                value={classSizeRange.min}
-                onChange={(e) => handleClassSizeChange('min', e.target.value)}
-                className="shadow appearance-none border rounded w-1/2 py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                placeholder="Min"
-                min="1"
-              />
-              <input
-                type="number"
-                value={classSizeRange.max}
-                onChange={(e) => handleClassSizeChange('max', e.target.value)}
-                className="shadow appearance-none border rounded w-1/2 py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                placeholder="Max"
-                min="1"
-              />
-            </div>
+             <label className="block text-gray-700 text-sm font-bold mb-2">Class Size Range</label>
+             <div className="flex gap-2">
+                <input type="number" value={classSizeRange.min} onChange={(e) => handleClassSizeChange('min', e.target.value)} className="shadow border rounded w-1/2 py-2 px-3" placeholder="Min" />
+                <input type="number" value={classSizeRange.max} onChange={(e) => handleClassSizeChange('max', e.target.value)} className="shadow border rounded w-1/2 py-2 px-3" placeholder="Max" />
+             </div>
           </div>
         </div>
       </div>
 
-      <button
-        onClick={generateClasses}
-        className="bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg focus:outline-none focus:shadow-outline text-xl w-full mb-8"
-      >
+      <button onClick={generateClasses} className="bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-xl w-full mb-8">
         Generate Classes
       </button>
 
-      {/* Generated Classes Output */}
-      {Object.keys(generatedClasses).length > 0 && (
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-semibold text-gray-700">Generated Classes</h2>
-            <button
-              onClick={exportToXLSX}
-              className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-            >
-              Export to .xlsx
-            </button>
-          </div>
-
-          {Object.keys(generatedClasses).map(groupName => (
-            <div key={groupName} className="mb-8">
-              <h3 className="text-xl font-bold mb-4 text-gray-800">{groupName}</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {generatedClasses[groupName].map((cls, index) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4 shadow-sm">
-                    <h4 className="text-lg font-semibold mb-3 text-indigo-700">Class {index + 1} ({cls.students.length} students)</h4>
-                    <table className="min-w-full divide-y divide-gray-200 mb-4">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student Name</th>
-                          <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Old Class</th>
-                          <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Academic</th>
-                          <th scope="col" className="px-3 py-2 text-left text-xs font-to-medium text-gray-500 uppercase tracking-wider">Behaviour</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {cls.students.sort((a, b) => a.surname.localeCompare(b.surname)).map(student => (
-                          <tr key={student.id}>
-                            {/* Class applied here for background highlight, font remains black (text-gray-900) */}
-                            <td className={`px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900 ${getFriendSeparationHighlight(student.fullName, cls.students)}`}>{student.fullName}</td>
-                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.existingClass}</td>
-                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.academic}</td>
-                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{student.behaviour}</td>
+      <DragDropContext onDragEnd={onDragEnd}>
+        {Object.keys(generatedClasses).length > 0 && (
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-semibold text-gray-700">Generated Classes</h2>
+              <button onClick={exportToXLSX} className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded">Export to .xlsx</button>
+            </div>
+            <p className="text-center text-gray-700 mb-6 font-medium">Feel free to drag and drop if you want a change before you export.</p>
+            
+            {Object.keys(generatedClasses).map(groupName => (
+              <div key={groupName} className="mb-8">
+                <h3 className="text-xl font-bold mb-4 text-gray-800">{groupName}</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {generatedClasses[groupName].map((cls, index) => (
+                    <div key={`${groupName}-${index}`} className="border border-gray-200 rounded-lg p-4 shadow-sm">
+                      <h4 className="text-lg font-semibold mb-3 text-indigo-700">Class {index + 1} ({cls.students.length})</h4>
+                      <table className="min-w-full divide-y divide-gray-200 mb-4">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-2 py-1 text-left text-xs font-medium text-gray-500">Name</th>
+                            <th className="px-2 py-1 text-left text-xs font-medium text-gray-500">Old</th>
+                            <th className="px-2 py-1 text-left text-xs font-medium text-gray-500">Acad</th>
+                            <th className="px-2 py-1 text-left text-xs font-medium text-gray-500">Beh</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-
-                    <div className="text-sm">
-                      <h5 className="font-semibold mt-4 mb-2 text-gray-700">Class Balance:</h5>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <p className="font-medium">Gender:</p>
-                          {Object.entries(cls.stats.gender).map(([gender, count]) => (
-                            <p key={gender} className={`px-2 py-1 rounded-md`}>
-                              {gender}: {count}
-                            </p>
-                          ))}
-                        </div>
-                        <div>
-                          <p className="font-medium">Academic:</p>
-                          {academicOrder.map(level => (
-                            (cls.stats.academic[level] > 0) &&
-                            <p key={level} className={`px-2 py-1 rounded-md`}>
-                              {level}: {cls.stats.academic[level]}
-                            </p>
-                          ))}
-                        </div>
-                        <div>
-                          <p className="font-medium">Behaviour:</p>
-                          {behaviourOrder.map(level => (
-                            (cls.stats.behaviour[level] > 0) &&
-                            <p key={level} className={`px-2 py-1 rounded-md`}>
-                              {level}: {cls.stats.behaviour[level]}
-                            </p>
-                          ))}
-                        </div>
-                        <div>
-                          <p className="font-medium">Previous Class:</p>
-                          {Object.entries(cls.stats.existingClass).sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true })).map(([className, count]) => (
-                            <p key={className} className={`px-2 py-1 rounded-md`}>
-                              {className}: {count}
-                            </p>
-                          ))}
-                        </div>
+                        </thead>
+                        <Droppable droppableId={`${groupName}::${index}`}>
+                          {(provided) => (
+                            <tbody ref={provided.innerRef} {...provided.droppableProps} className="bg-white divide-y divide-gray-200">
+                              {cls.students.map((student, studentIndex) => (
+                                <Draggable key={student.id} draggableId={student.id} index={studentIndex}>
+                                  {(provided) => (
+                                    <tr
+                                      ref={provided.innerRef}
+                                      {...provided.draggableProps}
+                                      {...provided.dragHandleProps}
+                                      className={getFriendSeparationHighlight(student.fullName, cls.students)}
+                                    >
+                                      <td className="px-2 py-2 text-sm font-medium text-gray-900">{student.fullName}</td>
+                                      <td className="px-2 py-2 text-sm text-gray-500">{student.existingClass}</td>
+                                      <td className="px-2 py-2 text-sm text-gray-500">{student.academic}</td>
+                                      <td className="px-2 py-2 text-sm text-gray-500">{student.behaviour}</td>
+                                    </tr>
+                                  )}
+                                </Draggable>
+                              ))}
+                              {provided.placeholder}
+                            </tbody>
+                          )}
+                        </Droppable>
+                      </table>
+                      {/* Stats Display */}
+                      <div className="text-xs space-y-1 mt-2 pt-2 border-t">
+                         <p><strong>Gender:</strong> {Object.entries(cls.stats.gender).map(([k,v])=>`${k}:${v}`).join(', ')}</p>
+                         <p><strong>Academic:</strong> {academicOrder.map(l => cls.stats.academic[l] ? `${l}:${cls.stats.academic[l]}` : null).filter(Boolean).join(', ')}</p>
+                         <p><strong>Behaviour:</strong> {behaviourOrder.map(l => cls.stats.behaviour[l] ? `${l}:${cls.stats.behaviour[l]}` : null).filter(Boolean).join(', ')}</p>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </DragDropContext>
 
       <div className="text-center text-gray-600 mt-12 p-4 border-t">
         <p className="font-semibold">Other apps charge thousands of dollars for this functionality.</p>
