@@ -5,12 +5,13 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 function App() {
   const [students, setStudents] = useState([]);
   
-  // Parameters state
+  // Class Parameters state
   const [yearLevelsInput, setYearLevelsInput] = useState('7');
   const [totalClassesInput, setTotalClassesInput] = useState(0);
   const [compositeClassesInput, setCompositeClassesInput] = useState(0);
   const [classSizeRange, setClassSizeRange] = useState({ min: 20, max: 30 });
   
+  // Logic state
   const [friendRequests, setFriendRequests] = useState([]);
   const [separationRequests, setSeparationRequests] = useState([]);
   const [generatedClasses, setGeneratedClasses] = useState({});
@@ -341,7 +342,6 @@ function App() {
     setGeneratedClasses(final);
   };
 
-  // DND
   const onDragEnd = (result) => {
     if (!result.destination) return;
     const { source, destination } = result;
@@ -373,9 +373,7 @@ function App() {
         <h1 className="text-3xl font-bold mb-2 text-gray-800">Class Builder App</h1>
         <p className="text-xl text-gray-600 mb-8">Making building classes as easy as 1,2...3</p>
       </div>
-
       {notification && <div className="fixed top-4 right-4 bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 shadow-md z-50">{notification}</div>}
-
       <div className="flex gap-4 mb-6 justify-center">
          <button onClick={saveProgress} className="bg-indigo-600 hover:bg-indigo-800 text-white font-bold py-2 px-6 rounded shadow">Save Progress</button>
          <button onClick={loadProgress} className="bg-gray-600 hover:bg-gray-800 text-white font-bold py-2 px-6 rounded shadow">Load Progress</button>
@@ -383,7 +381,6 @@ function App() {
       <div className="mb-6 max-w-lg mx-auto">
           <button onClick={downloadTemplate} className="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">Download CSV Template</button>
       </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div className="bg-white p-6 rounded-lg shadow-md">
           <label className="block text-gray-700 text-sm font-bold mb-2">Paste Tab-Separated Data (Template):</label>
@@ -405,9 +402,7 @@ function App() {
           </div>
         </div>
       </div>
-
       <button onClick={generateClasses} className="bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-xl w-full mb-8">Generate Classes</button>
-
       <DragDropContext onDragEnd={onDragEnd}>
         {Object.keys(generatedClasses).length > 0 && (
           <div className="bg-white p-6 rounded-lg shadow-md">
@@ -444,4 +439,26 @@ function App() {
                        </table>
                        <div className="text-xs mt-2 pt-2 border-t">
                           <p><strong>Gender:</strong> {Object.entries(cls.stats.gender).map(([k,v])=>`${k}:${v}`).join(', ')}</p>
-                          <p><strong>Academic:</strong>
+                          <p><strong>Academic:</strong> {academicOrder.map(k => cls.stats.academic[k]?`${k}:${cls.stats.academic[k]}`:null).filter(Boolean).join(', ')}</p>
+                          <p><strong>Behaviour:</strong> {behaviourOrder.map(k => cls.stats.behaviour[k]?`${k}:${cls.stats.behaviour[k]}`:null).filter(Boolean).join(', ')}</p>
+                       </div>
+                     </div>
+                   ))}
+                 </div>
+               </div>
+             ))}
+          </div>
+        )}
+      </DragDropContext>
+      <div className="text-center text-gray-600 mt-12 p-4 border-t">
+        <p className="font-semibold">Other apps charge thousands of dollars for this functionality.</p>
+        <p className="mb-2">We're sure this saved you a lot of precious time and we just ask for a fair donation.</p>
+        <p className="text-sm font-mono">Peter Buultjens</p>
+        <p className="text-sm font-mono">BSB: 062-948</p>
+        <p className="text-sm font-mono">Account: 2402 2276</p>
+      </div>
+    </div>
+  );
+}
+
+export default App;
