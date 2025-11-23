@@ -1,17 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import XLSX from 'xlsx-js-style';
+import * as XLSX from 'xlsx-js-style';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 function App() {
   const [students, setStudents] = useState([]);
   
-  // Class Parameters state
+  // Parameters state
   const [yearLevelsInput, setYearLevelsInput] = useState('7');
   const [totalClassesInput, setTotalClassesInput] = useState(0);
   const [compositeClassesInput, setCompositeClassesInput] = useState(0);
   const [classSizeRange, setClassSizeRange] = useState({ min: 20, max: 30 });
   
-  // Logic state
   const [friendRequests, setFriendRequests] = useState([]);
   const [separationRequests, setSeparationRequests] = useState([]);
   const [generatedClasses, setGeneratedClasses] = useState({});
@@ -166,6 +165,7 @@ function App() {
     
     wsData.push(headerRow, subHeaderRow);
 
+    // Pre-sort
     const sortedAllClasses = allclasses.map(cls => ({
       ...cls,
       students: cls.students.sort((a,b) => a.surname.localeCompare(b.surname))
@@ -210,6 +210,7 @@ function App() {
       for (let c = 0; c < sortedAllClasses.length; c++) {
         const s = sortedAllClasses[c].students[r-2];
         if (s) {
+           // Logic: Check separation first (Red), then Friend (Green)
            let style = null;
            if (friendRequests.some(req => req.students.includes(s.fullName) && sortedAllClasses[c].students.some(p => req.students.includes(p.fullName) && p.fullName !== s.fullName))) {
              style = greenStyle;
@@ -221,7 +222,7 @@ function App() {
            if (style) {
              for(let k=0; k<4; k++) {
                const ref = XLSX.utils.encode_cell({r, c: colIndex + k});
-               if(!ws[ref]) ws[ref] = {v: wsData[r][colIndex+k], t:'s'};
+               if(!ws[ref]) ws[ref] = {v: wsData[r][colIndex+k] || "", t:'s'};
                ws[ref].s = style;
              }
            }
@@ -231,6 +232,7 @@ function App() {
     }
     
     ws['!cols'] = colWidths;
+    // Merges
     ws['!merges'] = [];
     colIndex = 0;
     for (let c = 0; c < allclasses.length; c++) {
@@ -362,8 +364,8 @@ function App() {
   };
 
   const getHighlight = (name, list) => {
-     if (friendRequests.some(req => req.students.includes(name) && list.some(s => req.students.includes(s.fullName) && s.fullName !== name))) return "bg-green-200 font-bold";
-     if (separationRequests.some(req => req.students.includes(name))) return "bg-red-200 font-bold";
+     if (friendRequests.some(req => req.students.includes(name) && list.some(s => req.students.includes(s.fullName) && s.fullName !== name))) return "bg-green-200";
+     if (separationRequests.some(req => req.students.includes(name))) return "bg-red-200";
      return "";
   };
 
