@@ -9,8 +9,7 @@ function App() {
   const [yearLevelsInput, setYearLevelsInput] = useState('7');
   const [totalClassesInput, setTotalClassesInput] = useState(0);
   const [compositeClassesInput, setCompositeClassesInput] = useState(0);
-  // Removed unused classSizeRange state setter
-  const [classSizeRange] = useState({ min: 20, max: 30 }); 
+  const [classSizeRange, setClassSizeRange] = useState({ min: 20, max: 30 });
   
   const [friendRequests, setFriendRequests] = useState([]);
   const [separationRequests, setSeparationRequests] = useState([]);
@@ -20,6 +19,22 @@ function App() {
   // Define stat orders
   const academicOrder = ['High', 'Average', 'Low', 'Unknown'];
   const behaviourOrder = ['High', 'Average', 'Low', 'Needs Support', 'Excellent', 'Good', 'Unknown'];
+
+  // --- HELPER: Calculate stats for a single class ---
+  const calculateStatsForClass = (cls) => {
+    const newStats = { gender: {}, academic: {}, behaviour: {}, existingClass: {} };
+    cls.students.forEach(s => {
+      const g = s.gender || 'Unknown';
+      const a = s.academic || 'Unknown';
+      const b = s.behaviour || 'Unknown';
+      const e = s.existingClass || 'Unknown';
+      newStats.gender[g] = (newStats.gender[g] || 0) + 1;
+      newStats.academic[a] = (newStats.academic[a] || 0) + 1;
+      newStats.behaviour[b] = (newStats.behaviour[b] || 0) + 1;
+      newStats.existingClass[e] = (newStats.existingClass[e] || 0) + 1;
+    });
+    return newStats;
+  };
 
   // --- SAVE & LOAD ---
   const saveProgress = () => {
@@ -37,8 +52,7 @@ function App() {
       setYearLevelsInput(parsed.yearLevelsInput || '');
       setTotalClassesInput(parsed.totalClassesInput || 0);
       setCompositeClassesInput(parsed.compositeClassesInput || 0);
-      // classSizeRange is essentially constant in this version, so we don't strictly need to load it, 
-      // but if we added inputs back, we would.
+      setClassSizeRange(parsed.classSizeRange || { min: 20, max: 30 });
       setFriendRequests(parsed.friendRequests || []);
       setSeparationRequests(parsed.separationRequests || []);
       setGeneratedClasses(parsed.generatedClasses || {});
@@ -118,7 +132,9 @@ function App() {
     setStudents(parseStudentData(dataObjects));
   };
 
-  // Removed unused handleClassSizeChange function
+  const handleClassSizeChange = (field, value) => {
+    setClassSizeRange(prev => ({ ...prev, [field]: parseInt(value, 10) || 0 }));
+  };
 
   const downloadTemplate = () => {
     const headers = "Class,Surname,First Name,Gender,Academic,Behaviour Needs,Request: Pair,Request: Separate";
@@ -323,7 +339,7 @@ function App() {
        totalStraightCount += straightPools[y].length;
     });
 
-    let straightClassesCreated = 0;
+    let straightCreated = 0;
     years.forEach((y, i) => {
        if (!straightCounts[y]) return;
        let n = (i === years.length - 1) ? numStraight - straightCreated : Math.round((straightCounts[y]/totalStraightCount) * numStraight);
@@ -335,13 +351,13 @@ function App() {
     });
 
     const compPool = groupPool.filter(s => !allPlacedIds.has(s.id));
-    // Removed unused 'compIds' variable
-    const [compCls] = runBalancing(compPool, compositeClassesInput);
+    const [compCls, compIds] = runBalancing(compPool, compositeClassesInput);
     if (compCls.length) final[`Composite ${years.map(y=>parseInt(y)+1).join('/')}`] = compCls;
 
     setGeneratedClasses(final);
   };
 
+  // DND Logic
   const onDragEnd = (result) => {
     if (!result.destination) return;
     const { source, destination } = result;
@@ -354,6 +370,7 @@ function App() {
     const [moved] = srcList.splice(source.index, 1);
     destList.splice(destination.index, 0, moved);
 
+    // Recalc stats
     [newClasses[sGroup][sIdx], newClasses[dGroup][dIdx]].forEach(c => {
        c.stats = { gender: {}, academic: {}, behaviour: {}, existingClass: {} };
        c.students.forEach(s => ['academic', 'behaviour', 'gender', 'existingClass'].forEach(k => c.stats[k][s[k]||'Unknown'] = (c.stats[k][s[k]||'Unknown']||0)+1));
@@ -396,7 +413,10 @@ function App() {
              <div className="w-1/2"><label className="block text-gray-700 text-sm font-bold">Total Classes</label><input type="number" value={totalClassesInput} onChange={e => setTotalClassesInput(parseInt(e.target.value)||0)} className="shadow border rounded w-full py-2 px-3"/></div>
              <div className="w-1/2"><label className="block text-gray-700 text-sm font-bold">Composite</label><input type="number" value={compositeClassesInput} onChange={e => setCompositeClassesInput(parseInt(e.target.value)||0)} className="shadow border rounded w-full py-2 px-3"/></div>
           </div>
-          {/* Inputs for range removed as requested implicitly by design simplification, fixed values used in logic if inputs re-added ensure handlers exist */}
+          <div className="flex gap-2">
+             <input type="number" value={classSizeRange.min} onChange={e => handleClassSizeChange('min', e.target.value)} className="shadow border rounded w-1/2 py-2 px-3" placeholder="Min Size" />
+             <input type="number" value={classSizeRange.max} onChange={e => handleClassSizeChange('max', e.target.value)} className="shadow border rounded w-1/2 py-2 px-3" placeholder="Max Size" />
+          </div>
         </div>
       </div>
       <button onClick={generateClasses} className="bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-xl w-full mb-8">Generate Classes</button>
