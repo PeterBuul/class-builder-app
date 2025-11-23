@@ -1,17 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import * as XLSX from 'xlsx-js-style';
+import XLSX from 'xlsx-js-style';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 function App() {
   const [students, setStudents] = useState([]);
   
-  // Class Parameters state
+  // Parameters state
   const [yearLevelsInput, setYearLevelsInput] = useState('7');
   const [totalClassesInput, setTotalClassesInput] = useState(0);
   const [compositeClassesInput, setCompositeClassesInput] = useState(0);
   const [classSizeRange, setClassSizeRange] = useState({ min: 20, max: 30 });
   
-  // Logic state
   const [friendRequests, setFriendRequests] = useState([]);
   const [separationRequests, setSeparationRequests] = useState([]);
   const [generatedClasses, setGeneratedClasses] = useState({});
@@ -92,7 +91,7 @@ function App() {
     return data.map((row, index) => {
       const fullName = `${row['First Name'] || ''} ${row.Surname || ''}`.trim();
       return {
-        id: `student-${Date.now()}-${index}`, 
+        id: `student-${Date.now()}-${index}-${Math.random()}`, 
         firstName: row['First Name'] || '',
         surname: row.Surname || '',
         fullName: fullName || `Student ${index + 1}`,
@@ -162,7 +161,6 @@ function App() {
     
     wsData.push(headerRow, subHeaderRow);
 
-    // Pre-sort
     const sortedAllClasses = allclasses.map(cls => ({
       ...cls,
       students: cls.students.sort((a,b) => a.surname.localeCompare(b.surname))
@@ -184,7 +182,6 @@ function App() {
       wsData.push(row);
     }
     
-    // Stats
     wsData.push([]); 
     const statsStart = wsData.length;
     const tRow = [], gRow = [], aRow = [], bRow = [];
@@ -200,9 +197,8 @@ function App() {
 
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     
-    // Styling
-    const greenStyle = { fill: { fgColor: { rgb: "C6EFCE" } }, font: { bold: true } }; // Excel Green
-    const redStyle = { fill: { fgColor: { rgb: "FFC7CE" } }, font: { bold: true } };   // Excel Red
+    const greenStyle = { fill: { fgColor: { rgb: "C6EFCE" } }, font: { bold: true } }; 
+    const redStyle = { fill: { fgColor: { rgb: "FFC7CE" } }, font: { bold: true } };   
 
     for (let r = 2; r < maxLen + 2; r++) {
       colIndex = 0;
@@ -210,7 +206,6 @@ function App() {
         const s = sortedAllClasses[c].students[r-2];
         if (s) {
            let style = null;
-           // Logic: Red overrides Green
            if (friendRequests.some(req => req.students.includes(s.fullName) && sortedAllClasses[c].students.some(p => req.students.includes(p.fullName) && p.fullName !== s.fullName))) {
              style = greenStyle;
            }
@@ -221,7 +216,7 @@ function App() {
            if (style) {
              for(let k=0; k<4; k++) {
                const ref = XLSX.utils.encode_cell({r, c: colIndex + k});
-               if(!ws[ref]) ws[ref] = {v: "", t:'s'};
+               if(!ws[ref]) ws[ref] = {v: wsData[r][colIndex+k], t:'s'};
                ws[ref].s = style;
              }
            }
@@ -231,15 +226,14 @@ function App() {
     }
     
     ws['!cols'] = colWidths;
-    // Merges
     ws['!merges'] = [];
     colIndex = 0;
     for (let c = 0; c < allclasses.length; c++) {
-       ws['!merges'].push({ s: { r: 0, c: colIndex }, e: { r: 0, c: colIndex + 3 } }); // Header
-       ws['!merges'].push({ s: { r: statsStart, c: colIndex }, e: { r: statsStart, c: colIndex + 3 } }); // Stats Title
-       ws['!merges'].push({ s: { r: statsStart+1, c: colIndex+1 }, e: { r: statsStart+1, c: colIndex+3 } }); // Gender
-       ws['!merges'].push({ s: { r: statsStart+2, c: colIndex+1 }, e: { r: statsStart+2, c: colIndex+3 } }); // Acad
-       ws['!merges'].push({ s: { r: statsStart+3, c: colIndex+1 }, e: { r: statsStart+3, c: colIndex+3 } }); // Beh
+       ws['!merges'].push({ s: { r: 0, c: colIndex }, e: { r: 0, c: colIndex + 3 } }); 
+       ws['!merges'].push({ s: { r: statsStart, c: colIndex }, e: { r: statsStart, c: colIndex + 3 } }); 
+       ws['!merges'].push({ s: { r: statsStart+1, c: colIndex+1 }, e: { r: statsStart+1, c: colIndex+3 } }); 
+       ws['!merges'].push({ s: { r: statsStart+2, c: colIndex+1 }, e: { r: statsStart+2, c: colIndex+3 } }); 
+       ws['!merges'].push({ s: { r: statsStart+3, c: colIndex+1 }, e: { r: statsStart+3, c: colIndex+3 } }); 
        colIndex += 5;
     }
 
@@ -264,7 +258,6 @@ function App() {
        if (c.students.length >= classSizeRange.max) return 100000;
        if (separationRequests.some(req => req.students.includes(s.fullName) && c.students.some(p => req.students.includes(p.fullName)))) return 100000;
        let cost = 0;
-       // Cost calcs
        ['academic', 'behaviour', 'gender'].forEach(cat => {
           const total = groupTotals[cat][s[cat]] || 0;
           const avg = total / count;
@@ -274,7 +267,6 @@ function App() {
        return cost;
     };
 
-    // Friends first
     friendRequests.forEach(req => {
       const [n1, n2] = req.students;
       const s1 = pool.find(s => s.fullName === n1 && !placedIds.includes(s.id));
@@ -299,15 +291,10 @@ function App() {
           if (cost < minCost) { minCost = cost; bestC = c; }
        });
        if (bestC && minCost < 100000) {
-          bestC.students.push(s);
-          updateStats(bestC, s);
-          placedIds.push(s.id);
+          bestC.students.push(s); updateStats(bestC, s); placedIds.push(s.id);
        } else {
-          // Force place in smallest available to ensure all are placed
           const fallback = classes.sort((a,b) => a.students.length - b.students.length).find(c => c.students.length < classSizeRange.max) || classes[0];
-          fallback.students.push(s);
-          updateStats(fallback, s);
-          placedIds.push(s.id);
+          fallback.students.push(s); updateStats(fallback, s); placedIds.push(s.id);
        }
     });
     return [classes, placedIds];
@@ -350,7 +337,6 @@ function App() {
     setGeneratedClasses(final);
   };
 
-  // DND
   const onDragEnd = (result) => {
     if (!result.destination) return;
     const { source, destination } = result;
@@ -363,7 +349,6 @@ function App() {
     const [moved] = srcList.splice(source.index, 1);
     destList.splice(destination.index, 0, moved);
 
-    // Recalc stats
     [newClasses[sGroup][sIdx], newClasses[dGroup][dIdx]].forEach(c => {
        c.stats = { gender: {}, academic: {}, behaviour: {}, existingClass: {} };
        c.students.forEach(s => ['academic', 'behaviour', 'gender', 'existingClass'].forEach(k => c.stats[k][s[k]||'Unknown'] = (c.stats[k][s[k]||'Unknown']||0)+1));
@@ -383,9 +368,7 @@ function App() {
         <h1 className="text-3xl font-bold mb-2 text-gray-800">Class Builder App</h1>
         <p className="text-xl text-gray-600 mb-8">Making building classes as easy as 1,2...3</p>
       </div>
-
       {notification && <div className="fixed top-4 right-4 bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 shadow-md z-50">{notification}</div>}
-
       <div className="flex gap-4 mb-6 justify-center">
          <button onClick={saveProgress} className="bg-indigo-600 hover:bg-indigo-800 text-white font-bold py-2 px-6 rounded shadow">Save Progress</button>
          <button onClick={loadProgress} className="bg-gray-600 hover:bg-gray-800 text-white font-bold py-2 px-6 rounded shadow">Load Progress</button>
@@ -393,7 +376,6 @@ function App() {
       <div className="mb-6 max-w-lg mx-auto">
           <button onClick={downloadTemplate} className="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">Download CSV Template</button>
       </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div className="bg-white p-6 rounded-lg shadow-md">
           <label className="block text-gray-700 text-sm font-bold mb-2">Paste Tab-Separated Data (Template):</label>
@@ -410,14 +392,12 @@ function App() {
              <div className="w-1/2"><label className="block text-gray-700 text-sm font-bold">Composite</label><input type="number" value={compositeClassesInput} onChange={e => setCompositeClassesInput(parseInt(e.target.value)||0)} className="shadow border rounded w-full py-2 px-3"/></div>
           </div>
           <div className="flex gap-2">
-             <input type="number" value={classSizeRange.min} onChange={e => setClassSizeRange({...classSizeRange, min:parseInt(e.target.value)})} className="shadow border rounded w-1/2 py-2 px-3" placeholder="Min Size" />
-             <input type="number" value={classSizeRange.max} onChange={e => setClassSizeRange({...classSizeRange, max:parseInt(e.target.value)})} className="shadow border rounded w-1/2 py-2 px-3" placeholder="Max Size" />
+             <input type="number" value={classSizeRange.min} onChange={e => setClassSizeRange({...classSizeRange, min:parseInt(e.target.value)})} className="shadow border rounded w-1/2 py-2 px-3" placeholder="Min" />
+             <input type="number" value={classSizeRange.max} onChange={e => setClassSizeRange({...classSizeRange, max:parseInt(e.target.value)})} className="shadow border rounded w-1/2 py-2 px-3" placeholder="Max" />
           </div>
         </div>
       </div>
-
       <button onClick={generateClasses} className="bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-xl w-full mb-8">Generate Classes</button>
-
       <DragDropContext onDragEnd={onDragEnd}>
         {Object.keys(generatedClasses).length > 0 && (
           <div className="bg-white p-6 rounded-lg shadow-md">
@@ -465,7 +445,6 @@ function App() {
           </div>
         )}
       </DragDropContext>
-
       <div className="text-center text-gray-600 mt-12 p-4 border-t">
         <p className="font-semibold">Other apps charge thousands of dollars for this functionality.</p>
         <p className="mb-2">We're sure this saved you a lot of precious time and we just ask for a fair donation.</p>
