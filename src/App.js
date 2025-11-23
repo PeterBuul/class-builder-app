@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import XLSX from 'xlsx-js-style';
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 function App() {
   const [students, setStudents] = useState([]);
@@ -9,8 +8,7 @@ function App() {
   const [yearLevelsInput, setYearLevelsInput] = useState('7');
   const [totalClassesInput, setTotalClassesInput] = useState(0);
   const [compositeClassesInput, setCompositeClassesInput] = useState(0);
-  // Removed classSizeRange state entirely as it wasn't being updated in UI
-  const classSizeRange = { min: 20, max: 30 }; 
+  const [classSizeRange, setClassSizeRange] = useState({ min: 20, max: 30 });
   
   const [friendRequests, setFriendRequests] = useState([]);
   const [separationRequests, setSeparationRequests] = useState([]);
@@ -23,7 +21,7 @@ function App() {
 
   // --- SAVE & LOAD ---
   const saveProgress = () => {
-    const data = { students, yearLevelsInput, totalClassesInput, compositeClassesInput, friendRequests, separationRequests, generatedClasses };
+    const data = { students, yearLevelsInput, totalClassesInput, compositeClassesInput, classSizeRange, friendRequests, separationRequests, generatedClasses };
     localStorage.setItem('classBuilderSave', JSON.stringify(data));
     setNotification('Progress Saved!');
     setTimeout(() => setNotification(''), 3000);
@@ -37,6 +35,7 @@ function App() {
       setYearLevelsInput(parsed.yearLevelsInput || '');
       setTotalClassesInput(parsed.totalClassesInput || 0);
       setCompositeClassesInput(parsed.compositeClassesInput || 0);
+      setClassSizeRange(parsed.classSizeRange || { min: 20, max: 30 });
       setFriendRequests(parsed.friendRequests || []);
       setSeparationRequests(parsed.separationRequests || []);
       setGeneratedClasses(parsed.generatedClasses || {});
@@ -116,6 +115,10 @@ function App() {
     setStudents(parseStudentData(dataObjects));
   };
 
+  const handleClassSizeChange = (field, value) => {
+    setClassSizeRange(prev => ({ ...prev, [field]: parseInt(value, 10) || 0 }));
+  };
+
   const downloadTemplate = () => {
     const headers = "Class,Surname,First Name,Gender,Academic,Behaviour Needs,Request: Pair,Request: Separate";
     const ex1 = "4A,Smith,Jane,Female,High,Good,John Doe,Tom Lee";
@@ -184,16 +187,29 @@ function App() {
     
     wsData.push([]); 
     const statsStart = wsData.length;
-    const tRow = [], gRow = [], aRow = [], bRow = [];
+    const tRow = [], gRow = [], aRow = [], bRow = [], eRow = []; // Added eRow for Existing Class
     colIndex = 0;
+    
     allclasses.forEach((cls) => {
       tRow[colIndex] = "--- Class Balance ---";
-      gRow[colIndex] = "Gender:"; gRow[colIndex+1] = Object.entries(cls.stats.gender).map(([k,v])=>`${k}:${v}`).join(', ');
-      aRow[colIndex] = "Academic:"; aRow[colIndex+1] = academicOrder.map(l => cls.stats.academic[l] ? `${l}:${cls.stats.academic[l]}` : null).filter(Boolean).join(', ');
-      bRow[colIndex] = "Behaviour:"; bRow[colIndex+1] = behaviourOrder.map(l => cls.stats.behaviour[l] ? `${l}:${cls.stats.behaviour[l]}` : null).filter(Boolean).join(', ');
+      gRow[colIndex] = "Gender:"; 
+      gRow[colIndex+1] = Object.entries(cls.stats.gender).map(([k,v])=>`${k}:${v}`).join(', ');
+      
+      aRow[colIndex] = "Academic:"; 
+      aRow[colIndex+1] = academicOrder.map(l=>cls.stats.academic[l]?`${l}:${cls.stats.academic[l]}`:null).filter(Boolean).join(', ');
+      
+      bRow[colIndex] = "Behaviour:"; 
+      bRow[colIndex+1] = behaviourOrder.map(l=>cls.stats.behaviour[l]?`${l}:${cls.stats.behaviour[l]}`:null).filter(Boolean).join(', ');
+      
+      // Add Previous Class stats
+      eRow[colIndex] = "Previous Class:";
+      eRow[colIndex+1] = Object.entries(cls.stats.existingClass)
+        .sort((a, b) => a[0].localeCompare(b[0], undefined, {numeric: true}))
+        .map(([k,v])=>`${k}:${v}`).join(', ');
+
       colIndex += 5;
     });
-    wsData.push(tRow, gRow, aRow, bRow);
+    wsData.push(tRow, gRow, aRow, bRow, eRow); // Added eRow
 
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     
@@ -229,11 +245,12 @@ function App() {
     ws['!merges'] = [];
     colIndex = 0;
     for (let c = 0; c < allclasses.length; c++) {
-       ws['!merges'].push({ s: { r: 0, c: colIndex }, e: { r: 0, c: colIndex + 3 } }); 
-       ws['!merges'].push({ s: { r: statsStart, c: colIndex }, e: { r: statsStart, c: colIndex + 3 } }); 
-       ws['!merges'].push({ s: { r: statsStart+1, c: colIndex+1 }, e: { r: statsStart+1, c: colIndex+3 } }); 
-       ws['!merges'].push({ s: { r: statsStart+2, c: colIndex+1 }, e: { r: statsStart+2, c: colIndex+3 } }); 
-       ws['!merges'].push({ s: { r: statsStart+3, c: colIndex+1 }, e: { r: statsStart+3, c: colIndex+3 } }); 
+       ws['!merges'].push({ s: { r: 0, c: colIndex }, e: { r: 0, c: colIndex + 3 } }); // Header
+       ws['!merges'].push({ s: { r: statsStart, c: colIndex }, e: { r: statsStart, c: colIndex + 3 } }); // Title
+       ws['!merges'].push({ s: { r: statsStart+1, c: colIndex+1 }, e: { r: statsStart+1, c: colIndex+3 } }); // Gender
+       ws['!merges'].push({ s: { r: statsStart+2, c: colIndex+1 }, e: { r: statsStart+2, c: colIndex+3 } }); // Acad
+       ws['!merges'].push({ s: { r: statsStart+3, c: colIndex+1 }, e: { r: statsStart+3, c: colIndex+3 } }); // Beh
+       ws['!merges'].push({ s: { r: statsStart+4, c: colIndex+1 }, e: { r: statsStart+4, c: colIndex+3 } }); // Existing (New)
        colIndex += 5;
     }
 
@@ -255,14 +272,20 @@ function App() {
     const updateStats = (c, s) => ['academic', 'behaviour', 'gender', 'existingClass'].forEach(k => c.stats[k][s[k]||'Unknown'] = (c.stats[k][s[k]||'Unknown']||0)+1);
     
     const calcCost = (s, c) => {
-       if (c.students.length >= classSizeRange.max) return 100000;
-       if (separationRequests.some(req => req.students.includes(s.fullName) && c.students.some(p => req.students.includes(p.fullName)))) return 100000;
+       if (c.students.length >= classSizeRange.max) return 1000000;
+       if (separationRequests.some(req => req.students.includes(s.fullName) && c.students.some(p => req.students.includes(p.fullName)))) return 1000000;
+
        let cost = 0;
+       const minSize = Math.min(...classes.map(cl => cl.students.length));
+       if (c.students.length > minSize) {
+           cost += 5000; 
+       }
+
        ['academic', 'behaviour', 'gender'].forEach(cat => {
           const total = groupTotals[cat][s[cat]] || 0;
           const avg = total / count;
           const curr = c.stats[cat][s[cat]] || 0;
-          cost += Math.pow(curr + 1 - avg, 2) * (cat === 'academic' || cat === 'behaviour' ? 3 : 2);
+          cost += Math.pow(curr + 1 - avg, 2) * (cat === 'academic' || cat === 'behaviour' ? 5 : 2);
        });
        return cost;
     };
@@ -272,7 +295,7 @@ function App() {
       const s1 = pool.find(s => s.fullName === n1 && !placedIds.includes(s.id));
       const s2 = pool.find(s => s.fullName === n2 && !placedIds.includes(s.id));
       if (s1 && s2) {
-         classes.sort((a,b) => a.students.length - b.students.length);
+         classes.sort((a,b) => a.students.length - b.students.length); 
          if (classes[0].students.length + 2 <= classSizeRange.max) {
             classes[0].students.push(s1, s2);
             updateStats(classes[0], s1); updateStats(classes[0], s2);
@@ -290,10 +313,11 @@ function App() {
           const cost = calcCost(s, c);
           if (cost < minCost) { minCost = cost; bestC = c; }
        });
-       if (bestC && minCost < 100000) {
+       
+       if (bestC && minCost < 900000) {
           bestC.students.push(s); updateStats(bestC, s); placedIds.push(s.id);
        } else {
-          const fallback = classes.sort((a,b) => a.students.length - b.students.length).find(c => c.students.length < classSizeRange.max) || classes[0];
+          const fallback = classes.sort((a,b) => a.students.length - b.students.length)[0];
           fallback.students.push(s); updateStats(fallback, s); placedIds.push(s.id);
        }
     });
@@ -331,34 +355,15 @@ function App() {
     });
 
     const compPool = groupPool.filter(s => !allPlacedIds.has(s.id));
-    const [compCls] = runBalancing(compPool, compositeClassesInput);
+    const [compCls, compIds] = runBalancing(compPool, compositeClassesInput);
     if (compCls.length) final[`Composite ${years.map(y=>parseInt(y)+1).join('/')}`] = compCls;
 
     setGeneratedClasses(final);
   };
 
-  const onDragEnd = (result) => {
-    if (!result.destination) return;
-    const { source, destination } = result;
-    const [sGroup, sIdx] = source.droppableId.split('::');
-    const [dGroup, dIdx] = destination.droppableId.split('::');
-    
-    const newClasses = { ...generatedClasses };
-    const srcList = newClasses[sGroup][sIdx].students;
-    const destList = newClasses[dGroup][dIdx].students;
-    const [moved] = srcList.splice(source.index, 1);
-    destList.splice(destination.index, 0, moved);
-
-    [newClasses[sGroup][sIdx], newClasses[dGroup][dIdx]].forEach(c => {
-       c.stats = { gender: {}, academic: {}, behaviour: {}, existingClass: {} };
-       c.students.forEach(s => ['academic', 'behaviour', 'gender', 'existingClass'].forEach(k => c.stats[k][s[k]||'Unknown'] = (c.stats[k][s[k]||'Unknown']||0)+1));
-    });
-    setGeneratedClasses(newClasses);
-  };
-
   const getHighlight = (name, list) => {
-     if (friendRequests.some(req => req.students.includes(name) && list.some(s => req.students.includes(s.fullName) && s.fullName !== name))) return "bg-green-200 font-bold";
-     if (separationRequests.some(req => req.students.includes(name))) return "bg-red-200 font-bold";
+     if (friendRequests.some(req => req.students.includes(name) && list.some(s => req.students.includes(s.fullName) && s.fullName !== name))) return "text-green-700 font-bold";
+     if (separationRequests.some(req => req.students.includes(name))) return "text-red-600 font-bold";
      return "";
   };
 
@@ -369,6 +374,7 @@ function App() {
         <p className="text-xl text-gray-600 mb-8">Making building classes as easy as 1,2...3</p>
       </div>
       {notification && <div className="fixed top-4 right-4 bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 shadow-md z-50">{notification}</div>}
+      
       <div className="flex gap-4 mb-6 justify-center">
          <button onClick={saveProgress} className="bg-indigo-600 hover:bg-indigo-800 text-white font-bold py-2 px-6 rounded shadow">Save Progress</button>
          <button onClick={loadProgress} className="bg-gray-600 hover:bg-gray-800 text-white font-bold py-2 px-6 rounded shadow">Load Progress</button>
@@ -391,17 +397,20 @@ function App() {
              <div className="w-1/2"><label className="block text-gray-700 text-sm font-bold">Total Classes</label><input type="number" value={totalClassesInput} onChange={e => setTotalClassesInput(parseInt(e.target.value)||0)} className="shadow border rounded w-full py-2 px-3"/></div>
              <div className="w-1/2"><label className="block text-gray-700 text-sm font-bold">Composite</label><input type="number" value={compositeClassesInput} onChange={e => setCompositeClassesInput(parseInt(e.target.value)||0)} className="shadow border rounded w-full py-2 px-3"/></div>
           </div>
+          <div className="flex gap-2">
+             <input type="number" value={classSizeRange.min} onChange={e => handleClassSizeChange('min', e.target.value)} className="shadow border rounded w-1/2 py-2 px-3" placeholder="Min Size" />
+             <input type="number" value={classSizeRange.max} onChange={e => handleClassSizeChange('max', e.target.value)} className="shadow border rounded w-1/2 py-2 px-3" placeholder="Max Size" />
+          </div>
         </div>
       </div>
       <button onClick={generateClasses} className="bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-xl w-full mb-8">Generate Classes</button>
-      <DragDropContext onDragEnd={onDragEnd}>
-        {Object.keys(generatedClasses).length > 0 && (
+      
+      {Object.keys(generatedClasses).length > 0 && (
           <div className="bg-white p-6 rounded-lg shadow-md">
              <div className="flex justify-between items-center mb-4">
                <h2 className="text-2xl font-bold">Generated Classes</h2>
                <button onClick={exportToXLSX} className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded">Export to .xlsx</button>
              </div>
-             <p className="text-center text-gray-600 mb-6">Feel free to drag and drop if you want a change before you export.</p>
              {Object.keys(generatedClasses).map(grp => (
                <div key={grp} className="mb-8">
                  <h3 className="text-xl font-bold mb-4">{grp}</h3>
@@ -411,27 +420,20 @@ function App() {
                        <h4 className="font-bold text-indigo-700 mb-2">Class {idx+1} ({cls.students.length})</h4>
                        <table className="min-w-full text-xs">
                          <thead><tr className="text-left text-gray-500"><th>Name</th><th>Old</th><th>Acad</th><th>Beh</th></tr></thead>
-                         <Droppable droppableId={`${grp}::${idx}`}>
-                           {(provided) => (
-                             <tbody ref={provided.innerRef} {...provided.droppableProps} className="bg-white">
+                         <tbody className="bg-white">
                                {cls.students.sort((a,b) => a.surname.localeCompare(b.surname)).map((s, i) => (
-                                 <Draggable key={s.id} draggableId={s.id} index={i}>
-                                   {(p) => (
-                                      <tr ref={p.innerRef} {...p.draggableProps} {...p.dragHandleProps} className={`border-b ${getHighlight(s.fullName, cls.students)}`}>
-                                        <td className="p-1">{s.fullName}</td><td className="p-1">{s.existingClass}</td><td className="p-1">{s.academic}</td><td className="p-1">{s.behaviour}</td>
-                                      </tr>
-                                   )}
-                                 </Draggable>
+                                  <tr key={s.id} className={`border-b ${getHighlight(s.fullName, cls.students)}`}>
+                                    <td className="p-1">{s.fullName}</td><td className="p-1">{s.existingClass}</td><td className="p-1">{s.academic}</td><td className="p-1">{s.behaviour}</td>
+                                  </tr>
                                ))}
-                               {provided.placeholder}
-                             </tbody>
-                           )}
-                         </Droppable>
+                         </tbody>
                        </table>
                        <div className="text-xs mt-2 pt-2 border-t">
                           <p><strong>Gender:</strong> {Object.entries(cls.stats.gender).map(([k,v])=>`${k}:${v}`).join(', ')}</p>
                           <p><strong>Academic:</strong> {academicOrder.map(k => cls.stats.academic[k]?`${k}:${cls.stats.academic[k]}`:null).filter(Boolean).join(', ')}</p>
                           <p><strong>Behaviour:</strong> {behaviourOrder.map(k => cls.stats.behaviour[k]?`${k}:${cls.stats.behaviour[k]}`:null).filter(Boolean).join(', ')}</p>
+                          {/* ADDED PREVIOUS CLASS STATS */}
+                          <p><strong>Previous Class:</strong> {Object.entries(cls.stats.existingClass).sort((a, b) => a[0].localeCompare(b[0], undefined, {numeric: true})).map(([k, v]) => `${k}: ${v}`).join(', ')}</p>
                        </div>
                      </div>
                    ))}
@@ -440,7 +442,7 @@ function App() {
              ))}
           </div>
         )}
-      </DragDropContext>
+
       <div className="text-center text-gray-600 mt-12 p-4 border-t">
         <p className="font-semibold">Other apps charge thousands of dollars for this functionality.</p>
         <p className="mb-2">We're sure this saved you a lot of precious time and we just ask for a fair donation.</p>
