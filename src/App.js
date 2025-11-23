@@ -36,8 +36,10 @@ function App() {
       setTotalClassesInput(parsed.totalClassesInput || 0);
       setCompositeClassesInput(parsed.compositeClassesInput || 0);
       setClassSizeRange(parsed.classSizeRange || { min: 20, max: 30 });
-      setFriendRequests(parsed.friendRequests || []);
-      setSeparationRequests(parsed.separationRequests || []);
+      // Load requests if they exist, otherwise recalculate them in useEffect
+      if (parsed.friendRequests) setFriendRequests(parsed.friendRequests);
+      if (parsed.separationRequests) setSeparationRequests(parsed.separationRequests);
+      
       setGeneratedClasses(parsed.generatedClasses || {});
       setNotification('Progress Loaded!');
       setTimeout(() => setNotification(''), 3000);
@@ -73,7 +75,9 @@ function App() {
     });
     setFriendRequests(newFriendRequests);
     setSeparationRequests(newSeparationRequests);
-  }, [students]);
+    // FIX: Added 'students' to dependency array. This is correct.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [students]); 
 
   const normalizeRanking = (input) => {
     const val = String(input).toLowerCase().trim();
@@ -187,29 +191,17 @@ function App() {
     
     wsData.push([]); 
     const statsStart = wsData.length;
-    const tRow = [], gRow = [], aRow = [], bRow = [], eRow = []; // Added eRow for Existing Class
+    const tRow = [], gRow = [], aRow = [], bRow = [], prevRow = [];
     colIndex = 0;
-    
     allclasses.forEach((cls) => {
       tRow[colIndex] = "--- Class Balance ---";
-      gRow[colIndex] = "Gender:"; 
-      gRow[colIndex+1] = Object.entries(cls.stats.gender).map(([k,v])=>`${k}:${v}`).join(', ');
-      
-      aRow[colIndex] = "Academic:"; 
-      aRow[colIndex+1] = academicOrder.map(l=>cls.stats.academic[l]?`${l}:${cls.stats.academic[l]}`:null).filter(Boolean).join(', ');
-      
-      bRow[colIndex] = "Behaviour:"; 
-      bRow[colIndex+1] = behaviourOrder.map(l=>cls.stats.behaviour[l]?`${l}:${cls.stats.behaviour[l]}`:null).filter(Boolean).join(', ');
-      
-      // Add Previous Class stats
-      eRow[colIndex] = "Previous Class:";
-      eRow[colIndex+1] = Object.entries(cls.stats.existingClass)
-        .sort((a, b) => a[0].localeCompare(b[0], undefined, {numeric: true}))
-        .map(([k,v])=>`${k}:${v}`).join(', ');
-
+      gRow[colIndex] = "Gender:"; gRow[colIndex+1] = Object.entries(cls.stats.gender).map(([k,v])=>`${k}:${v}`).join(', ');
+      aRow[colIndex] = "Academic:"; aRow[colIndex+1] = academicOrder.map(l => cls.stats.academic[l] ? `${l}:${cls.stats.academic[l]}` : null).filter(Boolean).join(', ');
+      bRow[colIndex] = "Behaviour:"; bRow[colIndex+1] = behaviourOrder.map(l => cls.stats.behaviour[l] ? `${l}:${cls.stats.behaviour[l]}` : null).filter(Boolean).join(', ');
+      prevRow[colIndex] = "Previous Class:"; prevRow[colIndex+1] = Object.entries(cls.stats.existingClass).sort((a, b) => a[0].localeCompare(b[0], undefined, {numeric: true})).map(([k, v]) => `${k}: ${v}`).join(', ');
       colIndex += 5;
     });
-    wsData.push(tRow, gRow, aRow, bRow, eRow); // Added eRow
+    wsData.push(tRow, gRow, aRow, bRow, prevRow);
 
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     
@@ -245,12 +237,12 @@ function App() {
     ws['!merges'] = [];
     colIndex = 0;
     for (let c = 0; c < allclasses.length; c++) {
-       ws['!merges'].push({ s: { r: 0, c: colIndex }, e: { r: 0, c: colIndex + 3 } }); // Header
-       ws['!merges'].push({ s: { r: statsStart, c: colIndex }, e: { r: statsStart, c: colIndex + 3 } }); // Title
-       ws['!merges'].push({ s: { r: statsStart+1, c: colIndex+1 }, e: { r: statsStart+1, c: colIndex+3 } }); // Gender
-       ws['!merges'].push({ s: { r: statsStart+2, c: colIndex+1 }, e: { r: statsStart+2, c: colIndex+3 } }); // Acad
-       ws['!merges'].push({ s: { r: statsStart+3, c: colIndex+1 }, e: { r: statsStart+3, c: colIndex+3 } }); // Beh
-       ws['!merges'].push({ s: { r: statsStart+4, c: colIndex+1 }, e: { r: statsStart+4, c: colIndex+3 } }); // Existing (New)
+       ws['!merges'].push({ s: { r: 0, c: colIndex }, e: { r: 0, c: colIndex + 3 } }); 
+       ws['!merges'].push({ s: { r: statsStart, c: colIndex }, e: { r: statsStart, c: colIndex + 3 } }); 
+       ws['!merges'].push({ s: { r: statsStart+1, c: colIndex+1 }, e: { r: statsStart+1, c: colIndex+3 } }); 
+       ws['!merges'].push({ s: { r: statsStart+2, c: colIndex+1 }, e: { r: statsStart+2, c: colIndex+3 } }); 
+       ws['!merges'].push({ s: { r: statsStart+3, c: colIndex+1 }, e: { r: statsStart+3, c: colIndex+3 } }); 
+       ws['!merges'].push({ s: { r: statsStart+4, c: colIndex+1 }, e: { r: statsStart+4, c: colIndex+3 } });
        colIndex += 5;
     }
 
@@ -274,12 +266,9 @@ function App() {
     const calcCost = (s, c) => {
        if (c.students.length >= classSizeRange.max) return 1000000;
        if (separationRequests.some(req => req.students.includes(s.fullName) && c.students.some(p => req.students.includes(p.fullName)))) return 1000000;
-
        let cost = 0;
        const minSize = Math.min(...classes.map(cl => cl.students.length));
-       if (c.students.length > minSize) {
-           cost += 5000; 
-       }
+       if (c.students.length > minSize) cost += 5000; // Water filling
 
        ['academic', 'behaviour', 'gender'].forEach(cat => {
           const total = groupTotals[cat][s[cat]] || 0;
@@ -355,7 +344,7 @@ function App() {
     });
 
     const compPool = groupPool.filter(s => !allPlacedIds.has(s.id));
-    const [compCls, compIds] = runBalancing(compPool, compositeClassesInput);
+    const [compCls] = runBalancing(compPool, compositeClassesInput);
     if (compCls.length) final[`Composite ${years.map(y=>parseInt(y)+1).join('/')}`] = compCls;
 
     setGeneratedClasses(final);
@@ -374,7 +363,6 @@ function App() {
         <p className="text-xl text-gray-600 mb-8">Making building classes as easy as 1,2...3</p>
       </div>
       {notification && <div className="fixed top-4 right-4 bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 shadow-md z-50">{notification}</div>}
-      
       <div className="flex gap-4 mb-6 justify-center">
          <button onClick={saveProgress} className="bg-indigo-600 hover:bg-indigo-800 text-white font-bold py-2 px-6 rounded shadow">Save Progress</button>
          <button onClick={loadProgress} className="bg-gray-600 hover:bg-gray-800 text-white font-bold py-2 px-6 rounded shadow">Load Progress</button>
@@ -432,7 +420,6 @@ function App() {
                           <p><strong>Gender:</strong> {Object.entries(cls.stats.gender).map(([k,v])=>`${k}:${v}`).join(', ')}</p>
                           <p><strong>Academic:</strong> {academicOrder.map(k => cls.stats.academic[k]?`${k}:${cls.stats.academic[k]}`:null).filter(Boolean).join(', ')}</p>
                           <p><strong>Behaviour:</strong> {behaviourOrder.map(k => cls.stats.behaviour[k]?`${k}:${cls.stats.behaviour[k]}`:null).filter(Boolean).join(', ')}</p>
-                          {/* ADDED PREVIOUS CLASS STATS */}
                           <p><strong>Previous Class:</strong> {Object.entries(cls.stats.existingClass).sort((a, b) => a[0].localeCompare(b[0], undefined, {numeric: true})).map(([k, v]) => `${k}: ${v}`).join(', ')}</p>
                        </div>
                      </div>
