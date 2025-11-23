@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import * as XLSX from 'xlsx-js-style';
+import XLSX from 'xlsx-js-style';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 function App() {
@@ -165,7 +165,6 @@ function App() {
     
     wsData.push(headerRow, subHeaderRow);
 
-    // Pre-sort
     const sortedAllClasses = allclasses.map(cls => ({
       ...cls,
       students: cls.students.sort((a,b) => a.surname.localeCompare(b.surname))
@@ -202,6 +201,7 @@ function App() {
 
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     
+    // --- CORRECT STYLE DEFINITIONS FOR XLSX-JS-STYLE ---
     const greenStyle = { fill: { fgColor: { rgb: "C6EFCE" } }, font: { bold: true } }; 
     const redStyle = { fill: { fgColor: { rgb: "FFC7CE" } }, font: { bold: true } };   
 
@@ -210,11 +210,12 @@ function App() {
       for (let c = 0; c < sortedAllClasses.length; c++) {
         const s = sortedAllClasses[c].students[r-2];
         if (s) {
-           // Logic: Check separation first (Red), then Friend (Green)
            let style = null;
+           // Friend Match (Green)
            if (friendRequests.some(req => req.students.includes(s.fullName) && sortedAllClasses[c].students.some(p => req.students.includes(p.fullName) && p.fullName !== s.fullName))) {
              style = greenStyle;
            }
+           // Separation Match (Red - Overrides Green)
            if (separationRequests.some(req => req.students.includes(s.fullName))) {
              style = redStyle;
            }
@@ -232,7 +233,6 @@ function App() {
     }
     
     ws['!cols'] = colWidths;
-    // Merges
     ws['!merges'] = [];
     colIndex = 0;
     for (let c = 0; c < allclasses.length; c++) {
@@ -344,9 +344,11 @@ function App() {
     setGeneratedClasses(final);
   };
 
+  // DND Logic
   const onDragEnd = (result) => {
     if (!result.destination) return;
     const { source, destination } = result;
+    // Use '::' delimiter
     const [sGroup, sIdx] = source.droppableId.split('::');
     const [dGroup, dIdx] = destination.droppableId.split('::');
     
@@ -364,8 +366,8 @@ function App() {
   };
 
   const getHighlight = (name, list) => {
-     if (friendRequests.some(req => req.students.includes(name) && list.some(s => req.students.includes(s.fullName) && s.fullName !== name))) return "bg-green-200";
-     if (separationRequests.some(req => req.students.includes(name))) return "bg-red-200";
+     if (friendRequests.some(req => req.students.includes(name) && list.some(s => req.students.includes(s.fullName) && s.fullName !== name))) return "text-green-700 font-bold";
+     if (separationRequests.some(req => req.students.includes(name))) return "text-red-600 font-bold";
      return "";
   };
 
@@ -376,6 +378,7 @@ function App() {
         <p className="text-xl text-gray-600 mb-8">Making building classes as easy as 1,2...3</p>
       </div>
       {notification && <div className="fixed top-4 right-4 bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 shadow-md z-50">{notification}</div>}
+      
       <div className="flex gap-4 mb-6 justify-center">
          <button onClick={saveProgress} className="bg-indigo-600 hover:bg-indigo-800 text-white font-bold py-2 px-6 rounded shadow">Save Progress</button>
          <button onClick={loadProgress} className="bg-gray-600 hover:bg-gray-800 text-white font-bold py-2 px-6 rounded shadow">Load Progress</button>
@@ -383,6 +386,7 @@ function App() {
       <div className="mb-6 max-w-lg mx-auto">
           <button onClick={downloadTemplate} className="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">Download CSV Template</button>
       </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div className="bg-white p-6 rounded-lg shadow-md">
           <label className="block text-gray-700 text-sm font-bold mb-2">Paste Tab-Separated Data (Template):</label>
@@ -399,12 +403,14 @@ function App() {
              <div className="w-1/2"><label className="block text-gray-700 text-sm font-bold">Composite</label><input type="number" value={compositeClassesInput} onChange={e => setCompositeClassesInput(parseInt(e.target.value)||0)} className="shadow border rounded w-full py-2 px-3"/></div>
           </div>
           <div className="flex gap-2">
-             <input type="number" value={classSizeRange.min} onChange={e => setClassSizeRange({...classSizeRange, min:parseInt(e.target.value)})} className="shadow border rounded w-1/2 py-2 px-3" placeholder="Min Size" />
-             <input type="number" value={classSizeRange.max} onChange={e => setClassSizeRange({...classSizeRange, max:parseInt(e.target.value)})} className="shadow border rounded w-1/2 py-2 px-3" placeholder="Max Size" />
+             <input type="number" value={classSizeRange.min} onChange={e => handleClassSizeChange('min', e.target.value)} className="shadow border rounded w-1/2 py-2 px-3" placeholder="Min Size" />
+             <input type="number" value={classSizeRange.max} onChange={e => handleClassSizeChange('max', e.target.value)} className="shadow border rounded w-1/2 py-2 px-3" placeholder="Max Size" />
           </div>
         </div>
       </div>
+
       <button onClick={generateClasses} className="bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-xl w-full mb-8">Generate Classes</button>
+
       <DragDropContext onDragEnd={onDragEnd}>
         {Object.keys(generatedClasses).length > 0 && (
           <div className="bg-white p-6 rounded-lg shadow-md">
@@ -452,6 +458,7 @@ function App() {
           </div>
         )}
       </DragDropContext>
+
       <div className="text-center text-gray-600 mt-12 p-4 border-t">
         <p className="font-semibold">Other apps charge thousands of dollars for this functionality.</p>
         <p className="mb-2">We're sure this saved you a lot of precious time and we just ask for a fair donation.</p>
