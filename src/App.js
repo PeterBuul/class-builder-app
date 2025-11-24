@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import XLSX from 'xlsx-js-style';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 function App() {
   const [students, setStudents] = useState([]);
@@ -17,7 +18,6 @@ function App() {
 
   // Define stat orders
   const academicOrder = ['High', 'Average', 'Low', 'Unknown'];
-  // FIX: Updated order to match normalized values (High/Average/Low/Good etc.)
   const behaviourOrder = ['High', 'Average', 'Low', 'Needs Support', 'Excellent', 'Good', 'Unknown'];
 
   // --- SAVE & LOAD ---
@@ -37,10 +37,8 @@ function App() {
       setTotalClassesInput(parsed.totalClassesInput || 0);
       setCompositeClassesInput(parsed.compositeClassesInput || 0);
       setClassSizeRange(parsed.classSizeRange || { min: 20, max: 30 });
-      // Load requests if they exist
-      if (parsed.friendRequests) setFriendRequests(parsed.friendRequests);
-      if (parsed.separationRequests) setSeparationRequests(parsed.separationRequests);
-      
+      setFriendRequests(parsed.friendRequests || []);
+      setSeparationRequests(parsed.separationRequests || []);
       setGeneratedClasses(parsed.generatedClasses || {});
       setNotification('Progress Loaded!');
       setTimeout(() => setNotification(''), 3000);
@@ -74,16 +72,9 @@ function App() {
         }
       }
     });
-    
-    // Only update state if requests have actually changed to avoid infinite loops
-    if (JSON.stringify(newFriendRequests) !== JSON.stringify(friendRequests)) {
-        setFriendRequests(newFriendRequests);
-    }
-    if (JSON.stringify(newSeparationRequests) !== JSON.stringify(separationRequests)) {
-        setSeparationRequests(newSeparationRequests);
-    }
-    // FIX: Added all dependencies to satisfy linter
-  }, [students, friendRequests, separationRequests]); 
+    setFriendRequests(newFriendRequests);
+    setSeparationRequests(newSeparationRequests);
+  }, [students]);
 
   const normalizeRanking = (input) => {
     const val = String(input).toLowerCase().trim();
@@ -203,7 +194,6 @@ function App() {
       tRow[colIndex] = "--- Class Balance ---";
       gRow[colIndex] = "Gender:"; gRow[colIndex+1] = Object.entries(cls.stats.gender).map(([k,v])=>`${k}:${v}`).join(', ');
       aRow[colIndex] = "Academic:"; aRow[colIndex+1] = academicOrder.map(l => cls.stats.academic[l] ? `${l}:${cls.stats.academic[l]}` : null).filter(Boolean).join(', ');
-      // FIX: Use behaviourOrder correctly to catch "High" etc.
       bRow[colIndex] = "Behaviour:"; bRow[colIndex+1] = behaviourOrder.map(l => cls.stats.behaviour[l] ? `${l}:${cls.stats.behaviour[l]}` : null).filter(Boolean).join(', ');
       prevRow[colIndex] = "Previous Class:"; prevRow[colIndex+1] = Object.entries(cls.stats.existingClass).sort((a, b) => a[0].localeCompare(b[0], undefined, {numeric: true})).map(([k, v]) => `${k}: ${v}`).join(', ');
       colIndex += 5;
@@ -275,6 +265,7 @@ function App() {
        if (separationRequests.some(req => req.students.includes(s.fullName) && c.students.some(p => req.students.includes(p.fullName)))) return 1000000;
        
        let cost = 0;
+       // WATER FILLING: Penalize if bigger than smallest class
        const minSize = Math.min(...classes.map(cl => cl.students.length));
        if (c.students.length > minSize) cost += 5000;
 
@@ -345,6 +336,8 @@ function App() {
        if (!straightCounts[y]) return;
        let n = (i === years.length - 1) ? numStraight - straightCreated : Math.round((straightCounts[y]/totalStraightCount) * numStraight);
        if (numStraight === 0) n = 0;
+       
+       // FIX: Removed 'compIds' from destructuring as it is not returned here
        const [cls, ids] = runBalancing(straightPools[y], n);
        if (cls.length) final[`Straight Year ${parseInt(y)+1}`] = cls;
        ids.forEach(id => allPlacedIds.add(id));
@@ -352,10 +345,31 @@ function App() {
     });
 
     const compPool = groupPool.filter(s => !allPlacedIds.has(s.id));
-    const [compCls, compIds] = runBalancing(compPool, compositeClassesInput);
+    // FIX: Removed 'compIds' from destructuring
+    const [compCls] = runBalancing(compPool, compositeClassesInput);
     if (compCls.length) final[`Composite ${years.map(y=>parseInt(y)+1).join('/')}`] = compCls;
 
     setGeneratedClasses(final);
+  };
+
+  const onDragEnd = (result) => {
+    if (!result.destination) return;
+    const { source, destination } = result;
+    const [sGroup, sIdx] = source.droppableId.split('::');
+    const [dGroup, dIdx] = destination.droppableId.split('::');
+    
+    const newClasses = { ...generatedClasses };
+    const srcList = newClasses[sGroup][sIdx].students;
+    const destList = newClasses[dGroup][dIdx].students;
+    const [moved] = srcList.splice(source.index, 1);
+    destList.splice(destination.index, 0, moved);
+
+    // Recalc stats
+    [newClasses[sGroup][sIdx], newClasses[dGroup][dIdx]].forEach(c => {
+       c.stats = { gender: {}, academic: {}, behaviour: {}, existingClass: {} };
+       c.students.forEach(s => ['academic', 'behaviour', 'gender', 'existingClass'].forEach(k => c.stats[k][s[k]||'Unknown'] = (c.stats[k][s[k]||'Unknown']||0)+1));
+    });
+    setGeneratedClasses(newClasses);
   };
 
   const getHighlight = (name, list) => {
@@ -371,7 +385,6 @@ function App() {
         <p className="text-xl text-gray-600 mb-8">Making building classes as easy as 1,2...3</p>
       </div>
       {notification && <div className="fixed top-4 right-4 bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 shadow-md z-50">{notification}</div>}
-      
       <div className="flex gap-4 mb-6 justify-center">
          <button onClick={saveProgress} className="bg-indigo-600 hover:bg-indigo-800 text-white font-bold py-2 px-6 rounded shadow">Save Progress</button>
          <button onClick={loadProgress} className="bg-gray-600 hover:bg-gray-800 text-white font-bold py-2 px-6 rounded shadow">Load Progress</button>
@@ -402,12 +415,14 @@ function App() {
       </div>
       <button onClick={generateClasses} className="bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-xl w-full mb-8">Generate Classes</button>
       
-      {Object.keys(generatedClasses).length > 0 && (
+      <DragDropContext onDragEnd={onDragEnd}>
+        {Object.keys(generatedClasses).length > 0 && (
           <div className="bg-white p-6 rounded-lg shadow-md">
              <div className="flex justify-between items-center mb-4">
                <h2 className="text-2xl font-bold">Generated Classes</h2>
                <button onClick={exportToXLSX} className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded">Export to .xlsx</button>
              </div>
+             <p className="text-center text-gray-600 mb-6">Feel free to drag and drop if you want a change before you export.</p>
              {Object.keys(generatedClasses).map(grp => (
                <div key={grp} className="mb-8">
                  <h3 className="text-xl font-bold mb-4">{grp}</h3>
@@ -417,13 +432,22 @@ function App() {
                        <h4 className="font-bold text-indigo-700 mb-2">Class {idx+1} ({cls.students.length})</h4>
                        <table className="min-w-full text-xs">
                          <thead><tr className="text-left text-gray-500"><th>Name</th><th>Old</th><th>Acad</th><th>Beh</th></tr></thead>
-                         <tbody className="bg-white">
+                         <Droppable droppableId={`${grp}::${idx}`}>
+                           {(provided) => (
+                             <tbody ref={provided.innerRef} {...provided.droppableProps} className="bg-white">
                                {cls.students.sort((a,b) => a.surname.localeCompare(b.surname)).map((s, i) => (
-                                  <tr key={s.id} className={`border-b ${getHighlight(s.fullName, cls.students)}`}>
-                                    <td className="p-1">{s.fullName}</td><td className="p-1">{s.existingClass}</td><td className="p-1">{s.academic}</td><td className="p-1">{s.behaviour}</td>
-                                  </tr>
+                                 <Draggable key={s.id} draggableId={String(s.id)} index={i}>
+                                   {(p) => (
+                                      <tr ref={p.innerRef} {...p.draggableProps} {...p.dragHandleProps} className={`border-b ${getHighlight(s.fullName, cls.students)}`}>
+                                        <td className="p-1">{s.fullName}</td><td className="p-1">{s.existingClass}</td><td className="p-1">{s.academic}</td><td className="p-1">{s.behaviour}</td>
+                                      </tr>
+                                   )}
+                                 </Draggable>
                                ))}
-                         </tbody>
+                               {provided.placeholder}
+                             </tbody>
+                           )}
+                         </Droppable>
                        </table>
                        <div className="text-xs mt-2 pt-2 border-t">
                           <p><strong>Gender:</strong> {Object.entries(cls.stats.gender).map(([k,v])=>`${k}:${v}`).join(', ')}</p>
@@ -438,6 +462,7 @@ function App() {
              ))}
           </div>
         )}
+      </DragDropContext>
 
       <div className="text-center text-gray-600 mt-12 p-4 border-t">
         <p className="font-semibold">Other apps charge thousands of dollars for this functionality.</p>
