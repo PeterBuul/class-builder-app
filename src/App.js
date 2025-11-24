@@ -45,69 +45,33 @@ function App() {
     }
   };
 
-  // --- PARSING LOGIC (FIXED FOR MULTIPLE REQUESTS) ---
+  // Auto-parse requests
   useEffect(() => {
     const newFriendRequests = [];
     const newSeparationRequests = [];
-
-    const findStudentFullName = (partialName, allStudents) => {
-      if (!partialName) return null;
-      const pName = partialName.toLowerCase().trim();
-      if (!pName) return null;
-      
-      // 1. Exact match
-      let match = allStudents.find(s => s.fullName.toLowerCase() === pName);
-      if (match) return match.fullName;
-
-      // 2. Starts with
-      match = allStudents.find(s => s.fullName.toLowerCase().startsWith(pName));
-      if (match) return match.fullName;
-      
-      return null; 
+    const findName = (partial, list) => {
+      if (!partial) return null;
+      const p = partial.toLowerCase().trim();
+      let m = list.find(s => s.fullName.toLowerCase() === p);
+      if (m) return m.fullName;
+      m = list.find(s => s.fullName.toLowerCase().startsWith(p));
+      return m ? m.fullName : null;
     };
 
-    // Helper to split multiple names in one cell (e.g. "Tom, Harry")
-    const parseNames = (rawString) => {
-        if (!rawString) return [];
-        // Split by comma, ampersand, or semicolon
-        return rawString.split(/[,&;]/).map(s => s.trim()).filter(Boolean);
-    };
-
-    students.forEach(student => {
-      // 1. Process Pairs
-      if (student.requestPair) {
-        const names = parseNames(student.requestPair);
-        names.forEach(name => {
-            const friendFullName = findStudentFullName(name, students);
-            if (friendFullName && student.fullName !== friendFullName) {
-                // Avoid duplicate rules
-                const exists = newFriendRequests.some(r => 
-                    (r.students.includes(student.fullName) && r.students.includes(friendFullName))
-                );
-                if (!exists) {
-                    newFriendRequests.push({ students: [student.fullName, friendFullName] });
-                }
-            }
-        });
+    students.forEach(s => {
+      if (s.requestPair) {
+        const f = findName(s.requestPair, students);
+        if (f && s.fullName !== f && !newFriendRequests.some(r => r.students.includes(s.fullName) && r.students.includes(f))) {
+          newFriendRequests.push({ students: [s.fullName, f] });
+        }
       }
-      
-      // 2. Process Separations
-      if (student.requestSeparate) {
-        const names = parseNames(student.requestSeparate);
-        names.forEach(name => {
-            const separateFullName = findStudentFullName(name, students);
-            if (separateFullName && student.fullName !== separateFullName) {
-                const exists = newSeparationRequests.some(r => 
-                    (r.students.includes(student.fullName) && r.students.includes(separateFullName))
-                );
-                if (!exists) {
-                    newSeparationRequests.push({ students: [student.fullName, separateFullName] });
-                }
-            }
-        });
+      if (s.requestSeparate) {
+        const f = findName(s.requestSeparate, students);
+        if (f && s.fullName !== f && !newSeparationRequests.some(r => r.students.includes(s.fullName) && r.students.includes(f))) {
+          newSeparationRequests.push({ students: [s.fullName, f] });
+        }
       }
     });
-
     setFriendRequests(newFriendRequests);
     setSeparationRequests(newSeparationRequests);
   }, [students]);
@@ -142,24 +106,13 @@ function App() {
   };
 
   const handleStudentNamesInput = (e) => {
-    const text = e.target.value;
-    const rows = text.split('\n').filter(row => row.trim() !== '');
-    const headerRow = rows[0].split('\t');
-    
-    const dataRows = (headerRow.includes('Surname') || headerRow.includes('Class') ? rows.slice(1) : rows)
-      .map(row => row.split('\t'));
-
+    const rows = e.target.value.split('\n').filter(r => r.trim() !== '');
+    const header = rows[0].split('\t');
+    const dataRows = (header.includes('Surname') || header.includes('Class') ? rows.slice(1) : rows).map(r => r.split('\t'));
     const dataObjects = dataRows.map(row => ({
-      'Class': row[0],
-      'Surname': row[1],
-      'First Name': row[2],
-      'Gender': row[3],
-      'Academic': row[4],
-      'Behaviour Needs': row[5],
-      'Request: Pair': row[6],
-      'Request: Separate': row[7],
+      'Class': row[0], 'Surname': row[1], 'First Name': row[2], 'Gender': row[3],
+      'Academic': row[4], 'Behaviour Needs': row[5], 'Request: Pair': row[6], 'Request: Separate': row[7],
     }));
-
     setStudents(parseStudentData(dataObjects));
   };
 
@@ -169,21 +122,13 @@ function App() {
 
   const downloadTemplate = () => {
     const headers = "Class,Surname,First Name,Gender,Academic,Behaviour Needs,Request: Pair,Request: Separate";
-    const example1 = "4A,Smith,Jane,Female,High,Good,John Doe,Tom Lee";
-    const example2 = "4B,Doe,John,Male,2,2,Jane S,"; 
-    const example3 = "4A,Brown,Charlie,Male,Low,Needs Support,,";
-    const example4 = "5A,Test,Alice,Female,3,High,,";
-    const example5 = ",Note:,Academic/Behaviour scale can be High/Average/Low, 3/2/1, or Good/Needs Support etc.,,,,";
-    const csvContent = "data:text/csv;charset=utf-8," + 
-      [headers, example1, example2, example3, example4, example5].join("\n");
-      
-    const encodedUri = encodeURI(csvContent);
+    const ex1 = "4A,Smith,Jane,Female,High,Good,John Doe,Tom Lee";
+    const ex2 = "4B,Doe,John,Male,2,2,Jane S,";
+    const csvContent = "data:text/csv;charset=utf-8," + [headers, ex1, ex2].join("\n");
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "student_template.csv");
-    document.body.appendChild(link);
+    link.href = encodeURI(csvContent);
+    link.download = "student_template.csv";
     link.click();
-    document.body.removeChild(link);
   };
 
   // --- EXPORT LOGIC ---
@@ -200,11 +145,7 @@ function App() {
     
     groupNames.forEach(groupName => {
       generatedClasses[groupName].forEach((cls, index) => {
-        allclasses.push({
-          ...cls,
-          groupName: groupName,
-          classIndex: index + 1 
-        });
+        allclasses.push({ ...cls, groupName, classIndex: index + 1 });
         if (cls.students.length > maxLen) maxLen = cls.students.length;
       });
     });
@@ -218,30 +159,27 @@ function App() {
       subHeaderRow[colIndex+1] = 'Old Class';
       subHeaderRow[colIndex+2] = 'Academic';
       subHeaderRow[colIndex+3] = 'Behaviour';
-      
       colWidths.push({wch: 30}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 5});
-      colIndex += 5; 
+      colIndex += 5;
     });
     
-    wsData.push(headerRow);
-    wsData.push(subHeaderRow);
+    wsData.push(headerRow, subHeaderRow);
 
     const sortedAllClasses = allclasses.map(cls => ({
       ...cls,
       students: cls.students.sort((a,b) => a.surname.localeCompare(b.surname))
     }));
     
-    for (let i = 0; i < maxLen; i++) { 
+    for (let i = 0; i < maxLen; i++) {
       const row = [];
       colIndex = 0;
-      for (let c = 0; c < sortedAllClasses.length; c++) { 
-        const cls = sortedAllClasses[c];
-        const student = cls.students[i];
-        if (student) {
-          row[colIndex] = student.fullName;
-          row[colIndex+1] = student.existingClass;
-          row[colIndex+2] = student.academic;
-          row[colIndex+3] = student.behaviour;
+      for (let c = 0; c < sortedAllClasses.length; c++) {
+        const s = sortedAllClasses[c].students[i];
+        if (s) {
+          row[colIndex] = s.fullName;
+          row[colIndex+1] = s.existingClass;
+          row[colIndex+2] = s.academic;
+          row[colIndex+3] = s.behaviour;
         }
         colIndex += 5;
       }
@@ -249,41 +187,25 @@ function App() {
     }
     
     wsData.push([]); 
-    const statsStartRow = wsData.length;
-    
-    const balanceTitleRow = [];
-    const genderRow = [];
-    const academicRow = [];
-    const behaviourRow = [];
-
+    const statsStart = wsData.length;
+    const tRow = [], gRow = [], aRow = [], bRow = [], prevRow = [];
     colIndex = 0;
     allclasses.forEach((cls) => {
-      balanceTitleRow[colIndex] = "--- Class Balance ---";
-      
-      genderRow[colIndex] = "Gender:";
-      genderRow[colIndex+1] = Object.entries(cls.stats.gender).map(([k, v]) => `${k}: ${v}`).join(', ');
-      
-      academicRow[colIndex] = "Academic:";
-      academicRow[colIndex+1] = academicOrder
-        .map(level => (cls.stats.academic[level] > 0 ? `${level}: ${cls.stats.academic[level]}` : null))
-        .filter(Boolean).join(', ');
-      
-      behaviourRow[colIndex] = "Behaviour:";
-      behaviourRow[colIndex+1] = behaviourOrder
-        .map(level => (cls.stats.behaviour[level] > 0 ? `${level}: ${cls.stats.behaviour[level]}` : null))
-        .filter(Boolean).join(', ');
-      
-      colIndex += 5; 
+      tRow[colIndex] = "--- Class Balance ---";
+      gRow[colIndex] = "Gender:"; gRow[colIndex+1] = Object.entries(cls.stats.gender).map(([k,v])=>`${k}:${v}`).join(', ');
+      aRow[colIndex] = "Academic:"; aRow[colIndex+1] = academicOrder.map(l => cls.stats.academic[l] ? `${l}:${cls.stats.academic[l]}` : null).filter(Boolean).join(', ');
+      bRow[colIndex] = "Behaviour:"; bRow[colIndex+1] = behaviourOrder.map(l => cls.stats.behaviour[l] ? `${l}:${cls.stats.behaviour[l]}` : null).filter(Boolean).join(', ');
+      prevRow[colIndex] = "Previous Class:"; prevRow[colIndex+1] = Object.entries(cls.stats.existingClass).sort((a, b) => a[0].localeCompare(b[0], undefined, {numeric: true})).map(([k, v]) => `${k}: ${v}`).join(', ');
+      colIndex += 5;
     });
-    
-    wsData.push(balanceTitleRow, genderRow, academicRow, behaviourRow);
+    wsData.push(tRow, gRow, aRow, bRow, prevRow);
 
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     
     const greenStyle = { fill: { fgColor: { rgb: "C6EFCE" } }, font: { bold: true } }; 
     const redStyle = { fill: { fgColor: { rgb: "FFC7CE" } }, font: { bold: true } };   
 
-    for (let r = 2; r < maxLen + 2; r++) { 
+    for (let r = 2; r < maxLen + 2; r++) {
       colIndex = 0;
       for (let c = 0; c < sortedAllClasses.length; c++) {
         const s = sortedAllClasses[c].students[r-2];
@@ -313,10 +235,11 @@ function App() {
     colIndex = 0;
     for (let c = 0; c < allclasses.length; c++) {
        ws['!merges'].push({ s: { r: 0, c: colIndex }, e: { r: 0, c: colIndex + 3 } }); 
-       ws['!merges'].push({ s: { r: statsStartRow, c: colIndex }, e: { r: statsStartRow, c: colIndex + 3 } }); 
-       ws['!merges'].push({ s: { r: statsStartRow+1, c: colIndex+1 }, e: { r: statsStartRow+1, c: colIndex+3 } }); 
-       ws['!merges'].push({ s: { r: statsStartRow+2, c: colIndex+1 }, e: { r: statsStartRow+2, c: colIndex+3 } }); 
-       ws['!merges'].push({ s: { r: statsStartRow+3, c: colIndex+1 }, e: { r: statsStartRow+3, c: colIndex+3 } }); 
+       ws['!merges'].push({ s: { r: statsStart, c: colIndex }, e: { r: statsStart, c: colIndex + 3 } }); 
+       ws['!merges'].push({ s: { r: statsStart+1, c: colIndex+1 }, e: { r: statsStart+1, c: colIndex+3 } }); 
+       ws['!merges'].push({ s: { r: statsStart+2, c: colIndex+1 }, e: { r: statsStart+2, c: colIndex+3 } }); 
+       ws['!merges'].push({ s: { r: statsStart+3, c: colIndex+1 }, e: { r: statsStart+3, c: colIndex+3 } }); 
+       ws['!merges'].push({ s: { r: statsStart+4, c: colIndex+1 }, e: { r: statsStart+4, c: colIndex+3 } });
        colIndex += 5;
     }
 
@@ -324,110 +247,68 @@ function App() {
     XLSX.writeFile(wb, "Generated_Classes.xlsx");
   };
 
-  // --- GENERATOR ---
-  const violatesSeparation = (student, classStudents) => {
-    for (const req of separationRequests) {
-      const [s1, s2] = req.students;
-      if ((student.fullName === s1 && classStudents.some(s => s.fullName === s2)) ||
-          (student.fullName === s2 && classStudents.some(s => s.fullName === s1))) {
-            return true;
-      }
-    }
-    return false;
-  };
-
-  const costForStat = (value, category, cls, groupTotals, numClassesToMake) => {
-    const totalCount = groupTotals[category][value] || 0;
-    const idealCountPerClass = totalCount / numClassesToMake;
-    const currentCount = (cls.stats[category] && cls.stats[category][value]) || 0;
-    const currentBadness = Math.pow(currentCount - idealCountPerClass, 2);
-    const newBadness = Math.pow((currentCount + 1) - idealCountPerClass, 2);
-    return newBadness - currentBadness;
-  };
-
-  const calculatePlacementCost = (student, cls, groupTotals, numClassesToMake, allClassesInGroup) => {
-    if (cls.students.length >= classSizeRange.max) return 1000000;
-    if (violatesSeparation(student, cls.students)) return 1000000; // Separation is NON-NEGOTIABLE
-    
-    let cost = 0;
-    // Water Filling: Penalize if bigger than smallest
-    const minSize = Math.min(...allClassesInGroup.map(cl => cl.students.length));
-    if (cls.students.length > minSize) cost += 5000;
-
-    cost += 3.0 * costForStat(student.academic, 'academic', cls, groupTotals, numClassesToMake);
-    cost += 3.0 * costForStat(student.behaviour, 'behaviour', cls, groupTotals, numClassesToMake);
-    cost += 2.0 * costForStat(student.gender, 'gender', cls, groupTotals, numClassesToMake);
-    
-    return cost;
-  };
-
+  // --- GENERATION LOGIC ---
   const runBalancing = (pool, count) => {
     if (count <= 0 || !pool.length) return [[], []];
-    
+    const placedIds = [];
     const classes = Array.from({ length: count }, () => ({
       students: [], stats: { gender: {}, academic: {}, behaviour: {}, existingClass: {} }
     }));
-    const placedIds = [];
+
     const groupTotals = { academic: {}, behaviour: {}, gender: {}, existingClass: {} };
+    pool.forEach(s => ['academic', 'behaviour', 'gender', 'existingClass'].forEach(k => groupTotals[k][s[k]||'Unknown'] = (groupTotals[k][s[k]||'Unknown']||0)+1));
+
+    const updateStats = (c, s) => ['academic', 'behaviour', 'gender', 'existingClass'].forEach(k => c.stats[k][s[k]||'Unknown'] = (c.stats[k][s[k]||'Unknown']||0)+1);
     
-    pool.forEach(s => ['academic', 'behaviour', 'gender', 'existingClass'].forEach(k => 
-        groupTotals[k][s[k]||'Unknown'] = (groupTotals[k][s[k]||'Unknown']||0)+1
-    ));
+    const calcCost = (s, c) => {
+       if (c.students.length >= classSizeRange.max) return 1000000;
+       if (separationRequests.some(req => req.students.includes(s.fullName) && c.students.some(p => req.students.includes(p.fullName)))) return 1000000;
+       
+       let cost = 0;
+       // WATER FILLING: Penalize if bigger than smallest class
+       const minSize = Math.min(...classes.map(cl => cl.students.length));
+       if (c.students.length > minSize) cost += 5000;
 
-    const updateStats = (c, s) => ['academic', 'behaviour', 'gender', 'existingClass'].forEach(k => 
-        c.stats[k][s[k]||'Unknown'] = (c.stats[k][s[k]||'Unknown']||0)+1
-    );
+       ['academic', 'behaviour', 'gender'].forEach(cat => {
+          const total = groupTotals[cat][s[cat]] || 0;
+          const avg = total / count;
+          const curr = c.stats[cat][s[cat]] || 0;
+          cost += Math.pow(curr + 1 - avg, 2) * (cat === 'academic' || cat === 'behaviour' ? 5 : 2);
+       });
+       return cost;
+    };
 
-    // 1. Friends (Try to pair)
     friendRequests.forEach(req => {
       const [n1, n2] = req.students;
       const s1 = pool.find(s => s.fullName === n1 && !placedIds.includes(s.id));
       const s2 = pool.find(s => s.fullName === n2 && !placedIds.includes(s.id));
-      
       if (s1 && s2) {
-         classes.sort((a,b) => a.students.length - b.students.length);
-         const bestC = classes[0];
-         if (bestC.students.length + 2 <= classSizeRange.max) {
-            bestC.students.push(s1, s2);
-            updateStats(bestC, s1); updateStats(bestC, s2);
+         classes.sort((a,b) => a.students.length - b.students.length); 
+         if (classes[0].students.length + 2 <= classSizeRange.max) {
+            classes[0].students.push(s1, s2);
+            updateStats(classes[0], s1); updateStats(classes[0], s2);
             placedIds.push(s1.id, s2.id);
          }
       }
     });
 
-    // 2. Remaining
     let remaining = pool.filter(s => !placedIds.includes(s.id));
-    for (let i = remaining.length - 1; i > 0; i--) { 
-        const j = Math.floor(Math.random() * (i + 1)); 
-        [remaining[i], remaining[j]] = [remaining[j], remaining[i]]; 
-    }
+    for (let i = remaining.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [remaining[i], remaining[j]] = [remaining[j], remaining[i]]; }
 
-    remaining.forEach(student => {
-       let bestClass = null;
-       let minCost = Infinity;
-       const shuffledClasses = [...classes].sort(() => Math.random() - 0.5);
-
-       shuffledClasses.forEach(cls => {
-          const cost = calculatePlacementCost(student, cls, groupTotals, count, classes);
-          if (cost < minCost) { minCost = cost; bestClass = cls; }
+    remaining.forEach(s => {
+       let bestC = null, minCost = Infinity;
+       classes.sort(() => Math.random() - 0.5).forEach(c => {
+          const cost = calcCost(s, c);
+          if (cost < minCost) { minCost = cost; bestC = c; }
        });
-
-       if (bestClass && minCost < 900000) {
-          bestClass.students.push(student);
-          updateStats(bestClass, student);
-          placedIds.push(student.id);
+       
+       if (bestC && minCost < 900000) {
+          bestC.students.push(s); updateStats(bestC, s); placedIds.push(s.id);
        } else {
-          // Force fallback: smallest class that isn't full
-          const fallback = classes.sort((a,b) => a.students.length - b.students.length)
-             .find(c => c.students.length < classSizeRange.max);
-          if (fallback) {
-             fallback.students.push(student);
-             updateStats(fallback, student);
-             placedIds.push(student.id);
-          }
+          const fallback = classes.sort((a,b) => a.students.length - b.students.length)[0];
+          fallback.students.push(s); updateStats(fallback, s); placedIds.push(s.id);
        }
     });
-
     return [classes, placedIds];
   };
 
@@ -438,76 +319,62 @@ function App() {
     
     const final = {};
     const allPlacedIds = new Set();
-    const allGroupStudents = students.filter(s => years.some(year => s.existingClass.startsWith(year)));
+    const groupPool = students.filter(s => years.some(y => s.existingClass.startsWith(y)));
 
     const straightPools = {};
     const straightCounts = {};
-    let totalCount = 0;
+    let totalStraightCount = 0;
     
-    years.forEach(year => {
-       const yearPool = allGroupStudents.filter(s => s.existingClass.startsWith(year));
-       straightPools[year] = yearPool;
-       straightCounts[year] = yearPool.length;
-       totalCount += yearPool.length;
+    years.forEach(y => {
+       straightPools[y] = groupPool.filter(s => s.existingClass.startsWith(y));
+       straightCounts[y] = straightPools[y].length;
+       totalStraightCount += straightPools[y].length;
     });
 
     let straightCreated = 0;
-    years.forEach((year, index) => {
-       if (!straightCounts[year]) return;
-       let n = (totalCount > 0) ? Math.round((straightCounts[year]/totalCount) * numStraight) : 0;
-       if (index === years.length - 1) n = numStraight - straightCreated;
-       if (numStraight <= 0) n = 0;
-       
-       if (n > 0) {
-           const [cls, ids] = runBalancing(straightPools[year], n);
-           if (cls.length) final[`Straight Year ${parseInt(year, 10) + 1}`] = cls;
-           ids.forEach(id => allPlacedIds.add(id));
-       }
+    years.forEach((y, i) => {
+       if (!straightCounts[y]) return;
+       let n = (i === years.length - 1) ? numStraight - straightCreated : Math.round((straightCounts[y]/totalStraightCount) * numStraight);
+       if (numStraight === 0) n = 0;
+       // FIX: Removed the unused variable 'ids' in the destructuring below
+       const [cls, placed] = runBalancing(straightPools[y], n);
+       if (cls.length) final[`Straight Year ${parseInt(y)+1}`] = cls;
+       placed.forEach(id => allPlacedIds.add(id));
        straightCreated += n;
     });
 
-    const compPool = allGroupStudents.filter(s => !allPlacedIds.has(s.id));
-    if (compositeClassesInput > 0) {
-        const [compCls, ids] = runBalancing(compPool, compositeClassesInput);
-        if (compCls.length) final[`Composite ${years.map(y=>parseInt(y)+1).join('/')}`] = compCls;
-        ids.forEach(id => allPlacedIds.add(id));
-    }
+    const compPool = groupPool.filter(s => !allPlacedIds.has(s.id));
+    // FIX: Removed the unused variable 'compIds' in the destructuring below
+    const [compCls] = runBalancing(compPool, compositeClassesInput);
+    if (compCls.length) final[`Composite ${years.map(y=>parseInt(y)+1).join('/')}`] = compCls;
 
     setGeneratedClasses(final);
-    showNotification("Classes Generated!");
   };
 
   const onDragEnd = (result) => {
     if (!result.destination) return;
-    const { source, destination, draggableId } = result;
-    
+    const { source, destination } = result;
     const [sGroup, sIdx] = source.droppableId.split('::');
     const [dGroup, dIdx] = destination.droppableId.split('::');
-
+    
     const newClasses = { ...generatedClasses };
     const srcList = newClasses[sGroup][sIdx].students;
     const destList = newClasses[dGroup][dIdx].students;
-
-    const movedIdx = srcList.findIndex(s => String(s.id) === draggableId);
-    if(movedIdx === -1) return;
-    const [moved] = srcList.splice(movedIdx, 1);
+    const [moved] = srcList.splice(source.index, 1);
     destList.splice(destination.index, 0, moved);
 
-    const recalc = (c) => {
+    // Recalc stats
+    [newClasses[sGroup][sIdx], newClasses[dGroup][dIdx]].forEach(c => {
        c.stats = { gender: {}, academic: {}, behaviour: {}, existingClass: {} };
        c.students.forEach(s => ['academic', 'behaviour', 'gender', 'existingClass'].forEach(k => c.stats[k][s[k]||'Unknown'] = (c.stats[k][s[k]||'Unknown']||0)+1));
-    };
-    recalc(newClasses[sGroup][sIdx]);
-    recalc(newClasses[dGroup][dIdx]);
-
+    });
     setGeneratedClasses(newClasses);
   };
 
   const getHighlight = (name, list) => {
-     let highlight = '';
-     if (friendRequests.some(req => req.students.includes(name) && list.some(s => req.students.includes(s.fullName) && s.fullName !== name))) highlight = "text-green-700 font-bold";
-     if (separationRequests.some(req => req.students.includes(name))) highlight = "text-red-600 font-bold";
-     return highlight;
+     if (friendRequests.some(req => req.students.includes(name) && list.some(s => req.students.includes(s.fullName) && s.fullName !== name))) return "text-green-700 font-bold";
+     if (separationRequests.some(req => req.students.includes(name))) return "text-red-600 font-bold";
+     return "";
   };
 
   return (
@@ -516,9 +383,7 @@ function App() {
         <h1 className="text-3xl font-bold mb-2 text-gray-800">Class Builder App</h1>
         <p className="text-xl text-gray-600 mb-8">Making building classes as easy as 1,2...3</p>
       </div>
-
       {notification && <div className="fixed top-4 right-4 bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 shadow-md z-50">{notification}</div>}
-
       <div className="flex gap-4 mb-6 justify-center">
          <button onClick={saveProgress} className="bg-indigo-600 hover:bg-indigo-800 text-white font-bold py-2 px-6 rounded shadow">Save Progress</button>
          <button onClick={loadProgress} className="bg-gray-600 hover:bg-gray-800 text-white font-bold py-2 px-6 rounded shadow">Load Progress</button>
@@ -526,11 +391,10 @@ function App() {
       <div className="mb-6 max-w-lg mx-auto">
           <button onClick={downloadTemplate} className="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">Download CSV Template</button>
       </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div className="bg-white p-6 rounded-lg shadow-md">
           <label className="block text-gray-700 text-sm font-bold mb-2">Paste Tab-Separated Data (Template):</label>
-          <textarea id="studentNames" className="shadow border rounded w-full py-2 px-3 h-32" placeholder="Paste here..." onChange={handleStudentNamesInput}></textarea>
+          <textarea className="shadow border rounded w-full py-2 px-3 h-32" placeholder="Paste here..." onChange={handleStudentNamesInput}></textarea>
         </div>
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold mb-4 text-gray-700">Class Parameters</h2>
@@ -548,9 +412,8 @@ function App() {
           </div>
         </div>
       </div>
-
       <button onClick={generateClasses} className="bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-xl w-full mb-8">Generate Classes</button>
-
+      
       <DragDropContext onDragEnd={onDragEnd}>
         {Object.keys(generatedClasses).length > 0 && (
           <div className="bg-white p-6 rounded-lg shadow-md">
@@ -572,7 +435,7 @@ function App() {
                            {(provided) => (
                              <tbody ref={provided.innerRef} {...provided.droppableProps} className="bg-white">
                                {cls.students.sort((a,b) => a.surname.localeCompare(b.surname)).map((s, i) => (
-                                 <Draggable key={s.id} draggableId={String(s.id)} index={i}>
+                                 <Draggable key={s.id} draggableId={s.id} index={i}>
                                    {(p) => (
                                       <tr ref={p.innerRef} {...p.draggableProps} {...p.dragHandleProps} className={`border-b ${getHighlight(s.fullName, cls.students)}`}>
                                         <td className="p-1">{s.fullName}</td><td className="p-1">{s.existingClass}</td><td className="p-1">{s.academic}</td><td className="p-1">{s.behaviour}</td>
@@ -589,6 +452,7 @@ function App() {
                           <p><strong>Gender:</strong> {Object.entries(cls.stats.gender).map(([k,v])=>`${k}:${v}`).join(', ')}</p>
                           <p><strong>Academic:</strong> {academicOrder.map(k => cls.stats.academic[k]?`${k}:${cls.stats.academic[k]}`:null).filter(Boolean).join(', ')}</p>
                           <p><strong>Behaviour:</strong> {behaviourOrder.map(k => cls.stats.behaviour[k]?`${k}:${cls.stats.behaviour[k]}`:null).filter(Boolean).join(', ')}</p>
+                          <p><strong>Previous Class:</strong> {Object.entries(cls.stats.existingClass).sort((a, b) => a[0].localeCompare(b[0], undefined, {numeric: true})).map(([k, v]) => `${k}: ${v}`).join(', ')}</p>
                        </div>
                      </div>
                    ))}
