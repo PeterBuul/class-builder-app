@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import XLSX from 'xlsx-js-style';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 function App() {
   const [students, setStudents] = useState([]);
@@ -36,10 +37,8 @@ function App() {
       setTotalClassesInput(parsed.totalClassesInput || 0);
       setCompositeClassesInput(parsed.compositeClassesInput || 0);
       setClassSizeRange(parsed.classSizeRange || { min: 20, max: 30 });
-      // Load requests if they exist, otherwise recalculate them in useEffect
-      if (parsed.friendRequests) setFriendRequests(parsed.friendRequests);
-      if (parsed.separationRequests) setSeparationRequests(parsed.separationRequests);
-      
+      setFriendRequests(parsed.friendRequests || []);
+      setSeparationRequests(parsed.separationRequests || []);
       setGeneratedClasses(parsed.generatedClasses || {});
       setNotification('Progress Loaded!');
       setTimeout(() => setNotification(''), 3000);
@@ -75,9 +74,7 @@ function App() {
     });
     setFriendRequests(newFriendRequests);
     setSeparationRequests(newSeparationRequests);
-    // FIX: Added 'students' to dependency array. This is correct.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [students]); 
+  }, [students]);
 
   const normalizeRanking = (input) => {
     const val = String(input).toLowerCase().trim();
@@ -266,9 +263,15 @@ function App() {
     const calcCost = (s, c) => {
        if (c.students.length >= classSizeRange.max) return 1000000;
        if (separationRequests.some(req => req.students.includes(s.fullName) && c.students.some(p => req.students.includes(p.fullName)))) return 1000000;
+       
        let cost = 0;
+       // --- WATER FILLING LOGIC ---
+       // Calculate the minimum size of any class in this group currently
        const minSize = Math.min(...classes.map(cl => cl.students.length));
-       if (c.students.length > minSize) cost += 5000; // Water filling
+       // If this class is bigger than the smallest class, penalize it heavily
+       if (c.students.length > minSize) {
+           cost += 5000; 
+       }
 
        ['academic', 'behaviour', 'gender'].forEach(cat => {
           const total = groupTotals[cat][s[cat]] || 0;
@@ -344,10 +347,31 @@ function App() {
     });
 
     const compPool = groupPool.filter(s => !allPlacedIds.has(s.id));
-    const [compCls] = runBalancing(compPool, compositeClassesInput);
+    const [compCls, compIds] = runBalancing(compPool, compositeClassesInput);
     if (compCls.length) final[`Composite ${years.map(y=>parseInt(y)+1).join('/')}`] = compCls;
 
     setGeneratedClasses(final);
+  };
+
+  const onDragEnd = (result) => {
+    if (!result.destination) return;
+    const { source, destination } = result;
+    // Use '::' delimiter
+    const [sGroup, sIdx] = source.droppableId.split('::');
+    const [dGroup, dIdx] = destination.droppableId.split('::');
+    
+    const newClasses = { ...generatedClasses };
+    const srcList = newClasses[sGroup][sIdx].students;
+    const destList = newClasses[dGroup][dIdx].students;
+    const [moved] = srcList.splice(source.index, 1);
+    destList.splice(destination.index, 0, moved);
+
+    // Recalc stats
+    [newClasses[sGroup][sIdx], newClasses[dGroup][dIdx]].forEach(c => {
+       c.stats = { gender: {}, academic: {}, behaviour: {}, existingClass: {} };
+       c.students.forEach(s => ['academic', 'behaviour', 'gender', 'existingClass'].forEach(k => c.stats[k][s[k]||'Unknown'] = (c.stats[k][s[k]||'Unknown']||0)+1));
+    });
+    setGeneratedClasses(newClasses);
   };
 
   const getHighlight = (name, list) => {
@@ -393,12 +417,14 @@ function App() {
       </div>
       <button onClick={generateClasses} className="bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-xl w-full mb-8">Generate Classes</button>
       
-      {Object.keys(generatedClasses).length > 0 && (
+      <DragDropContext onDragEnd={onDragEnd}>
+        {Object.keys(generatedClasses).length > 0 && (
           <div className="bg-white p-6 rounded-lg shadow-md">
              <div className="flex justify-between items-center mb-4">
                <h2 className="text-2xl font-bold">Generated Classes</h2>
                <button onClick={exportToXLSX} className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded">Export to .xlsx</button>
              </div>
+             <p className="text-center text-gray-600 mb-6">Feel free to drag and drop if you want a change before you export.</p>
              {Object.keys(generatedClasses).map(grp => (
                <div key={grp} className="mb-8">
                  <h3 className="text-xl font-bold mb-4">{grp}</h3>
@@ -408,13 +434,22 @@ function App() {
                        <h4 className="font-bold text-indigo-700 mb-2">Class {idx+1} ({cls.students.length})</h4>
                        <table className="min-w-full text-xs">
                          <thead><tr className="text-left text-gray-500"><th>Name</th><th>Old</th><th>Acad</th><th>Beh</th></tr></thead>
-                         <tbody className="bg-white">
+                         <Droppable droppableId={`${grp}::${idx}`}>
+                           {(provided) => (
+                             <tbody ref={provided.innerRef} {...provided.droppableProps} className="bg-white">
                                {cls.students.sort((a,b) => a.surname.localeCompare(b.surname)).map((s, i) => (
-                                  <tr key={s.id} className={`border-b ${getHighlight(s.fullName, cls.students)}`}>
-                                    <td className="p-1">{s.fullName}</td><td className="p-1">{s.existingClass}</td><td className="p-1">{s.academic}</td><td className="p-1">{s.behaviour}</td>
-                                  </tr>
+                                 <Draggable key={s.id} draggableId={s.id} index={i}>
+                                   {(p) => (
+                                      <tr ref={p.innerRef} {...p.draggableProps} {...p.dragHandleProps} className={`border-b ${getHighlight(s.fullName, cls.students)}`}>
+                                        <td className="p-1">{s.fullName}</td><td className="p-1">{s.existingClass}</td><td className="p-1">{s.academic}</td><td className="p-1">{s.behaviour}</td>
+                                      </tr>
+                                   )}
+                                 </Draggable>
                                ))}
-                         </tbody>
+                               {provided.placeholder}
+                             </tbody>
+                           )}
+                         </Droppable>
                        </table>
                        <div className="text-xs mt-2 pt-2 border-t">
                           <p><strong>Gender:</strong> {Object.entries(cls.stats.gender).map(([k,v])=>`${k}:${v}`).join(', ')}</p>
@@ -429,6 +464,7 @@ function App() {
              ))}
           </div>
         )}
+      </DragDropContext>
 
       <div className="text-center text-gray-600 mt-12 p-4 border-t">
         <p className="font-semibold">Other apps charge thousands of dollars for this functionality.</p>
