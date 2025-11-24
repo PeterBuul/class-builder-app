@@ -211,12 +211,11 @@ function App() {
         const s = sortedAllClasses[c].students[r-2];
         if (s) {
            let style = null;
-           // Logic: Check for Friend request
+           // Friend Match (Green)
            if (friendRequests.some(req => req.students.includes(s.fullName) && sortedAllClasses[c].students.some(p => req.students.includes(p.fullName) && p.fullName !== s.fullName))) {
              style = greenStyle;
            }
-           // Logic: Check for Separation request (Overrides Green)
-           // If student is in ANY separation request, highlight RED regardless of placement
+           // Separation Match (Red - Overrides Green)
            if (separationRequests.some(req => req.students.includes(s.fullName))) {
              style = redStyle;
            }
@@ -338,7 +337,8 @@ function App() {
     years.forEach((y, i) => {
        if (!straightCounts[y]) return;
        let n = (i === years.length - 1) ? numStraight - straightCreated : Math.round((straightCounts[y]/totalStraightCount) * numStraight);
-       if (numStraight === 0) n = 0;
+       if (numStraight <= 0) n = 0;
+       
        const [cls, ids] = runBalancing(straightPools[y], n);
        if (cls.length) final[`Straight Year ${parseInt(y)+1}`] = cls;
        ids.forEach(id => allPlacedIds.add(id));
@@ -355,7 +355,6 @@ function App() {
   const onDragEnd = (result) => {
     if (!result.destination) return;
     const { source, destination } = result;
-    // Use '::' delimiter
     const [sGroup, sIdx] = source.droppableId.split('::');
     const [dGroup, dIdx] = destination.droppableId.split('::');
     
@@ -375,7 +374,6 @@ function App() {
 
   const getHighlight = (name, list) => {
      if (friendRequests.some(req => req.students.includes(name) && list.some(s => req.students.includes(s.fullName) && s.fullName !== name))) return "text-green-700 font-bold";
-     // FIX: Highlight red if student is in ANY separation request, regardless of placement
      if (separationRequests.some(req => req.students.includes(name))) return "text-red-600 font-bold";
      return "";
   };
@@ -387,6 +385,7 @@ function App() {
         <p className="text-xl text-gray-600 mb-8">Making building classes as easy as 1,2...3</p>
       </div>
       {notification && <div className="fixed top-4 right-4 bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 shadow-md z-50">{notification}</div>}
+      
       <div className="flex gap-4 mb-6 justify-center">
          <button onClick={saveProgress} className="bg-indigo-600 hover:bg-indigo-800 text-white font-bold py-2 px-6 rounded shadow">Save Progress</button>
          <button onClick={loadProgress} className="bg-gray-600 hover:bg-gray-800 text-white font-bold py-2 px-6 rounded shadow">Load Progress</button>
@@ -434,13 +433,22 @@ function App() {
                        <h4 className="font-bold text-indigo-700 mb-2">Class {idx+1} ({cls.students.length})</h4>
                        <table className="min-w-full text-xs">
                          <thead><tr className="text-left text-gray-500"><th>Name</th><th>Old</th><th>Acad</th><th>Beh</th></tr></thead>
-                         <tbody className="bg-white">
+                         <Droppable droppableId={`${grp}::${idx}`}>
+                           {(provided) => (
+                             <tbody ref={provided.innerRef} {...provided.droppableProps} className="bg-white">
                                {cls.students.sort((a,b) => a.surname.localeCompare(b.surname)).map((s, i) => (
-                                  <tr key={s.id} className={`border-b ${getHighlight(s.fullName, cls.students)}`}>
-                                    <td className="p-1">{s.fullName}</td><td className="p-1">{s.existingClass}</td><td className="p-1">{s.academic}</td><td className="p-1">{s.behaviour}</td>
-                                  </tr>
+                                 <Draggable key={s.id} draggableId={s.id} index={i}>
+                                   {(p) => (
+                                      <tr ref={p.innerRef} {...p.draggableProps} {...p.dragHandleProps} className={`border-b ${getHighlight(s.fullName, cls.students)}`}>
+                                        <td className="p-1">{s.fullName}</td><td className="p-1">{s.existingClass}</td><td className="p-1">{s.academic}</td><td className="p-1">{s.behaviour}</td>
+                                      </tr>
+                                   )}
+                                 </Draggable>
                                ))}
-                         </tbody>
+                               {provided.placeholder}
+                             </tbody>
+                           )}
+                         </Droppable>
                        </table>
                        <div className="text-xs mt-2 pt-2 border-t">
                           <p><strong>Gender:</strong> {Object.entries(cls.stats.gender).map(([k,v])=>`${k}:${v}`).join(', ')}</p>
