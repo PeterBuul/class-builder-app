@@ -211,9 +211,12 @@ function App() {
         const s = sortedAllClasses[c].students[r-2];
         if (s) {
            let style = null;
+           // Logic: Check for Friend request
            if (friendRequests.some(req => req.students.includes(s.fullName) && sortedAllClasses[c].students.some(p => req.students.includes(p.fullName) && p.fullName !== s.fullName))) {
              style = greenStyle;
            }
+           // Logic: Check for Separation request (Overrides Green)
+           // If student is in ANY separation request, highlight RED regardless of placement
            if (separationRequests.some(req => req.students.includes(s.fullName))) {
              style = redStyle;
            }
@@ -336,16 +339,14 @@ function App() {
        if (!straightCounts[y]) return;
        let n = (i === years.length - 1) ? numStraight - straightCreated : Math.round((straightCounts[y]/totalStraightCount) * numStraight);
        if (numStraight === 0) n = 0;
-       // FIX: Removed the unused variable 'ids' in the destructuring below
-       const [cls, placed] = runBalancing(straightPools[y], n);
+       const [cls, ids] = runBalancing(straightPools[y], n);
        if (cls.length) final[`Straight Year ${parseInt(y)+1}`] = cls;
-       placed.forEach(id => allPlacedIds.add(id));
+       ids.forEach(id => allPlacedIds.add(id));
        straightCreated += n;
     });
 
     const compPool = groupPool.filter(s => !allPlacedIds.has(s.id));
-    // FIX: Removed the unused variable 'compIds' in the destructuring below
-    const [compCls] = runBalancing(compPool, compositeClassesInput);
+    const [compCls, compIds] = runBalancing(compPool, compositeClassesInput);
     if (compCls.length) final[`Composite ${years.map(y=>parseInt(y)+1).join('/')}`] = compCls;
 
     setGeneratedClasses(final);
@@ -354,6 +355,7 @@ function App() {
   const onDragEnd = (result) => {
     if (!result.destination) return;
     const { source, destination } = result;
+    // Use '::' delimiter
     const [sGroup, sIdx] = source.droppableId.split('::');
     const [dGroup, dIdx] = destination.droppableId.split('::');
     
@@ -373,6 +375,7 @@ function App() {
 
   const getHighlight = (name, list) => {
      if (friendRequests.some(req => req.students.includes(name) && list.some(s => req.students.includes(s.fullName) && s.fullName !== name))) return "text-green-700 font-bold";
+     // FIX: Highlight red if student is in ANY separation request, regardless of placement
      if (separationRequests.some(req => req.students.includes(name))) return "text-red-600 font-bold";
      return "";
   };
@@ -431,22 +434,13 @@ function App() {
                        <h4 className="font-bold text-indigo-700 mb-2">Class {idx+1} ({cls.students.length})</h4>
                        <table className="min-w-full text-xs">
                          <thead><tr className="text-left text-gray-500"><th>Name</th><th>Old</th><th>Acad</th><th>Beh</th></tr></thead>
-                         <Droppable droppableId={`${grp}::${idx}`}>
-                           {(provided) => (
-                             <tbody ref={provided.innerRef} {...provided.droppableProps} className="bg-white">
+                         <tbody className="bg-white">
                                {cls.students.sort((a,b) => a.surname.localeCompare(b.surname)).map((s, i) => (
-                                 <Draggable key={s.id} draggableId={s.id} index={i}>
-                                   {(p) => (
-                                      <tr ref={p.innerRef} {...p.draggableProps} {...p.dragHandleProps} className={`border-b ${getHighlight(s.fullName, cls.students)}`}>
-                                        <td className="p-1">{s.fullName}</td><td className="p-1">{s.existingClass}</td><td className="p-1">{s.academic}</td><td className="p-1">{s.behaviour}</td>
-                                      </tr>
-                                   )}
-                                 </Draggable>
+                                  <tr key={s.id} className={`border-b ${getHighlight(s.fullName, cls.students)}`}>
+                                    <td className="p-1">{s.fullName}</td><td className="p-1">{s.existingClass}</td><td className="p-1">{s.academic}</td><td className="p-1">{s.behaviour}</td>
+                                  </tr>
                                ))}
-                               {provided.placeholder}
-                             </tbody>
-                           )}
-                         </Droppable>
+                         </tbody>
                        </table>
                        <div className="text-xs mt-2 pt-2 border-t">
                           <p><strong>Gender:</strong> {Object.entries(cls.stats.gender).map(([k,v])=>`${k}:${v}`).join(', ')}</p>
