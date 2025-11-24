@@ -265,13 +265,9 @@ function App() {
        if (separationRequests.some(req => req.students.includes(s.fullName) && c.students.some(p => req.students.includes(p.fullName)))) return 1000000;
        
        let cost = 0;
-       // --- WATER FILLING LOGIC ---
-       // Calculate the minimum size of any class in this group currently
+       // WATER FILLING: Penalize if bigger than smallest class
        const minSize = Math.min(...classes.map(cl => cl.students.length));
-       // If this class is bigger than the smallest class, penalize it heavily
-       if (c.students.length > minSize) {
-           cost += 5000; 
-       }
+       if (c.students.length > minSize) cost += 5000;
 
        ['academic', 'behaviour', 'gender'].forEach(cat => {
           const total = groupTotals[cat][s[cat]] || 0;
