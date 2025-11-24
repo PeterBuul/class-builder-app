@@ -132,6 +132,12 @@ function App() {
   };
 
   // --- EXPORT LOGIC ---
+  const getHighlight = (name, list) => {
+     if (friendRequests.some(req => req.students.includes(name) && list.some(s => req.students.includes(s.fullName) && s.fullName !== name))) return "text-green-700 font-bold";
+     if (separationRequests.some(req => req.students.includes(name))) return "text-red-600 font-bold";
+     return "";
+  };
+
   const exportToXLSX = () => {
     const wb = XLSX.utils.book_new();
     const wsData = [];
@@ -265,7 +271,6 @@ function App() {
        if (separationRequests.some(req => req.students.includes(s.fullName) && c.students.some(p => req.students.includes(p.fullName)))) return 1000000;
        
        let cost = 0;
-       // WATER FILLING: Penalize if bigger than smallest class
        const minSize = Math.min(...classes.map(cl => cl.students.length));
        if (c.students.length > minSize) cost += 5000;
 
@@ -343,7 +348,7 @@ function App() {
     });
 
     const compPool = groupPool.filter(s => !allPlacedIds.has(s.id));
-    const [compCls, compIds] = runBalancing(compPool, compositeClassesInput);
+    const [compCls] = runBalancing(compPool, compositeClassesInput);
     if (compCls.length) final[`Composite ${years.map(y=>parseInt(y)+1).join('/')}`] = compCls;
 
     setGeneratedClasses(final);
@@ -361,17 +366,12 @@ function App() {
     const [moved] = srcList.splice(source.index, 1);
     destList.splice(destination.index, 0, moved);
 
+    // Recalc stats
     [newClasses[sGroup][sIdx], newClasses[dGroup][dIdx]].forEach(c => {
        c.stats = { gender: {}, academic: {}, behaviour: {}, existingClass: {} };
        c.students.forEach(s => ['academic', 'behaviour', 'gender', 'existingClass'].forEach(k => c.stats[k][s[k]||'Unknown'] = (c.stats[k][s[k]||'Unknown']||0)+1));
     });
     setGeneratedClasses(newClasses);
-  };
-
-  const getHighlight = (name, list) => {
-     if (friendRequests.some(req => req.students.includes(name) && list.some(s => req.students.includes(s.fullName) && s.fullName !== name))) return "text-green-700 font-bold";
-     if (separationRequests.some(req => req.students.includes(name))) return "text-red-600 font-bold";
-     return "";
   };
 
   return (
