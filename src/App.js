@@ -49,29 +49,57 @@ function App() {
   useEffect(() => {
     const newFriendRequests = [];
     const newSeparationRequests = [];
-    const findName = (partial, list) => {
-      if (!partial) return null;
-      const p = partial.toLowerCase().trim();
-      let m = list.find(s => s.fullName.toLowerCase() === p);
-      if (m) return m.fullName;
-      m = list.find(s => s.fullName.toLowerCase().startsWith(p));
-      return m ? m.fullName : null;
+
+    const findStudentFullName = (partialName, allStudents) => {
+      if (!partialName) return null;
+      const pName = partialName.toLowerCase().trim();
+      if (!pName) return null;
+      
+      // 1. Exact match
+      let match = allStudents.find(s => s.fullName.toLowerCase() === pName);
+      if (match) return match.fullName;
+
+      // 2. Starts with
+      match = allStudents.find(s => s.fullName.toLowerCase().startsWith(pName));
+      if (match) return match.fullName;
+      
+      return null;
     };
 
-    students.forEach(s => {
-      if (s.requestPair) {
-        const f = findName(s.requestPair, students);
-        if (f && s.fullName !== f && !newFriendRequests.some(r => r.students.includes(s.fullName) && r.students.includes(f))) {
-          newFriendRequests.push({ students: [s.fullName, f] });
-        }
+    // Helper to split names by comma, ampersand or semicolon
+    const parseNames = (str) => {
+        if (!str) return [];
+        return str.split(/[,&;]/).map(s => s.trim()).filter(Boolean);
+    };
+
+    students.forEach(student => {
+      // Logic for "Request: Pair"
+      if (student.requestPair) {
+        const targets = parseNames(student.requestPair);
+        targets.forEach(target => {
+            const friendFullName = findStudentFullName(target, students);
+            if (friendFullName && student.fullName !== friendFullName) {
+                if (!newFriendRequests.some(r => r.students.includes(student.fullName) && r.students.includes(friendFullName))) {
+                    newFriendRequests.push({ students: [student.fullName, friendFullName] });
+                }
+            }
+        });
       }
-      if (s.requestSeparate) {
-        const f = findName(s.requestSeparate, students);
-        if (f && s.fullName !== f && !newSeparationRequests.some(r => r.students.includes(s.fullName) && r.students.includes(f))) {
-          newSeparationRequests.push({ students: [s.fullName, f] });
-        }
+      
+      // Logic for "Request: Separate"
+      if (student.requestSeparate) {
+        const targets = parseNames(student.requestSeparate);
+        targets.forEach(target => {
+            const separateFullName = findStudentFullName(target, students);
+            if (separateFullName && student.fullName !== separateFullName) {
+                if (!newSeparationRequests.some(r => r.students.includes(student.fullName) && r.students.includes(separateFullName))) {
+                    newSeparationRequests.push({ students: [student.fullName, separateFullName] });
+                }
+            }
+        });
       }
     });
+
     setFriendRequests(newFriendRequests);
     setSeparationRequests(newSeparationRequests);
   }, [students]);
@@ -211,6 +239,7 @@ function App() {
         const s = sortedAllClasses[c].students[r-2];
         if (s) {
            let style = null;
+           // Highlight Logic: Red (Sep) overrides Green (Pair)
            if (friendRequests.some(req => req.students.includes(s.fullName) && sortedAllClasses[c].students.some(p => req.students.includes(p.fullName) && p.fullName !== s.fullName))) {
              style = greenStyle;
            }
@@ -265,7 +294,6 @@ function App() {
        if (separationRequests.some(req => req.students.includes(s.fullName) && c.students.some(p => req.students.includes(p.fullName)))) return 1000000;
        
        let cost = 0;
-       // WATER FILLING: Penalize if bigger than smallest class
        const minSize = Math.min(...classes.map(cl => cl.students.length));
        if (c.students.length > minSize) cost += 5000;
 
@@ -280,15 +308,39 @@ function App() {
 
     friendRequests.forEach(req => {
       const [n1, n2] = req.students;
-      const s1 = pool.find(s => s.fullName === n1 && !placedIds.includes(s.id));
-      const s2 = pool.find(s => s.fullName === n2 && !placedIds.includes(s.id));
+      // Check if either is already placed
+      const s1Placed = placedIds.includes(pool.find(s => s.fullName === n1)?.id);
+      const s2Placed = placedIds.includes(pool.find(s => s.fullName === n2)?.id);
+      
+      const s1 = pool.find(s => s.fullName === n1);
+      const s2 = pool.find(s => s.fullName === n2);
+
       if (s1 && s2) {
-         classes.sort((a,b) => a.students.length - b.students.length); 
-         if (classes[0].students.length + 2 <= classSizeRange.max) {
-            classes[0].students.push(s1, s2);
-            updateStats(classes[0], s1); updateStats(classes[0], s2);
-            placedIds.push(s1.id, s2.id);
-         }
+        if (!s1Placed && !s2Placed) {
+            // Case 1: Neither placed, put both in best class
+            classes.sort((a,b) => a.students.length - b.students.length); 
+            if (classes[0].students.length + 2 <= classSizeRange.max) {
+                classes[0].students.push(s1, s2);
+                updateStats(classes[0], s1); updateStats(classes[0], s2);
+                placedIds.push(s1.id, s2.id);
+            }
+        } else if (s1Placed && !s2Placed) {
+            // Case 2: S1 placed, try to put S2 with them
+            const targetClass = classes.find(c => c.students.some(st => st.id === s1.id));
+            if (targetClass && targetClass.students.length < classSizeRange.max) {
+                targetClass.students.push(s2);
+                updateStats(targetClass, s2);
+                placedIds.push(s2.id);
+            }
+        } else if (!s1Placed && s2Placed) {
+            // Case 3: S2 placed, try to put S1 with them
+            const targetClass = classes.find(c => c.students.some(st => st.id === s2.id));
+            if (targetClass && targetClass.students.length < classSizeRange.max) {
+                targetClass.students.push(s1);
+                updateStats(targetClass, s1);
+                placedIds.push(s1.id);
+            }
+        }
       }
     });
 
@@ -335,9 +387,8 @@ function App() {
     years.forEach((y, i) => {
        if (!straightCounts[y]) return;
        let n = (i === years.length - 1) ? numStraight - straightCreated : Math.round((straightCounts[y]/totalStraightCount) * numStraight);
-       if (numStraight === 0) n = 0;
+       if (numStraight <= 0) n = 0;
        
-       // FIX: Removed 'compIds' from destructuring as it is not returned here
        const [cls, ids] = runBalancing(straightPools[y], n);
        if (cls.length) final[`Straight Year ${parseInt(y)+1}`] = cls;
        ids.forEach(id => allPlacedIds.add(id));
@@ -345,9 +396,9 @@ function App() {
     });
 
     const compPool = groupPool.filter(s => !allPlacedIds.has(s.id));
-    // FIX: Removed 'compIds' from destructuring
-    const [compCls] = runBalancing(compPool, compositeClassesInput);
+    const [compCls, ids] = runBalancing(compPool, compositeClassesInput);
     if (compCls.length) final[`Composite ${years.map(y=>parseInt(y)+1).join('/')}`] = compCls;
+    ids.forEach(id => allPlacedIds.add(id));
 
     setGeneratedClasses(final);
   };
@@ -364,7 +415,6 @@ function App() {
     const [moved] = srcList.splice(source.index, 1);
     destList.splice(destination.index, 0, moved);
 
-    // Recalc stats
     [newClasses[sGroup][sIdx], newClasses[dGroup][dIdx]].forEach(c => {
        c.stats = { gender: {}, academic: {}, behaviour: {}, existingClass: {} };
        c.students.forEach(s => ['academic', 'behaviour', 'gender', 'existingClass'].forEach(k => c.stats[k][s[k]||'Unknown'] = (c.stats[k][s[k]||'Unknown']||0)+1));
@@ -373,8 +423,8 @@ function App() {
   };
 
   const getHighlight = (name, list) => {
-     if (friendRequests.some(req => req.students.includes(name) && list.some(s => req.students.includes(s.fullName) && s.fullName !== name))) return "text-green-700 font-bold";
      if (separationRequests.some(req => req.students.includes(name))) return "text-red-600 font-bold";
+     if (friendRequests.some(req => req.students.includes(name) && list.some(s => req.students.includes(s.fullName) && s.fullName !== name))) return "text-green-700 font-bold";
      return "";
   };
 
@@ -385,6 +435,7 @@ function App() {
         <p className="text-xl text-gray-600 mb-8">Making building classes as easy as 1,2...3</p>
       </div>
       {notification && <div className="fixed top-4 right-4 bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 shadow-md z-50">{notification}</div>}
+      
       <div className="flex gap-4 mb-6 justify-center">
          <button onClick={saveProgress} className="bg-indigo-600 hover:bg-indigo-800 text-white font-bold py-2 px-6 rounded shadow">Save Progress</button>
          <button onClick={loadProgress} className="bg-gray-600 hover:bg-gray-800 text-white font-bold py-2 px-6 rounded shadow">Load Progress</button>
